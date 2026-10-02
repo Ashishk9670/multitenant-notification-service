@@ -5,12 +5,13 @@ import com.example.notification.model.NotificationRequest;
 import com.example.notification.service.Delivery;
 import com.example.notification.service.DeliveryLogService;
 import com.example.notification.service.NotificationService;
+import com.example.notification.security.TenantPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Pattern;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,25 +33,24 @@ public class NotificationController {
     @Operation(summary = "Submit a notification; 202 on accept, 200 when replayed with the same Idempotency-Key")
     @PostMapping("/notifications")
     public ResponseEntity<NotificationAccepted> submit(
-            @RequestHeader("X-Tenant-Id") @Pattern(regexp = TENANT_REGEX) String tenantId,
+            @AuthenticationPrincipal TenantPrincipal tenant,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody NotificationRequest request) {
-        NotificationAccepted res = service.submit(tenantId, idempotencyKey, request);
+        NotificationAccepted res = service.submit(tenant.tenantId(), idempotencyKey, request);
         return ResponseEntity.status(res.duplicate() ? HttpStatus.OK : HttpStatus.ACCEPTED).body(res);
     }
 
     @Operation(summary = "Delivery status of one notification (per channel)")
     @GetMapping("/notifications/{id}")
-    public List<DeliveryView> status(@RequestHeader("X-Tenant-Id") @Pattern(regexp = TENANT_REGEX) String tenantId,
-                                     @PathVariable String id) {
-        return deliveries.forNotification(tenantId, id).stream().map(DeliveryView::of).toList();
+    public List<DeliveryView> status(@AuthenticationPrincipal TenantPrincipal tenant, @PathVariable String id) {
+        return deliveries.forNotification(tenant.tenantId(), id).stream().map(DeliveryView::of).toList();
     }
 
     @Operation(summary = "Recent deliveries for the tenant")
     @GetMapping("/deliveries")
-    public List<DeliveryView> recent(@RequestHeader("X-Tenant-Id") @Pattern(regexp = TENANT_REGEX) String tenantId,
+    public List<DeliveryView> recent(@AuthenticationPrincipal TenantPrincipal tenant,
                                      @RequestParam(defaultValue = "50") int limit) {
-        return deliveries.recent(tenantId, limit).stream().map(DeliveryView::of).toList();
+        return deliveries.recent(tenant.tenantId(), limit).stream().map(DeliveryView::of).toList();
     }
 
     public record DeliveryView(String notificationId, String channel, String status, int attempts,

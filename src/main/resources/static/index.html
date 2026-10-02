@@ -25,9 +25,10 @@
 <body>
 <header>
   <strong>Notification Admin</strong>
-  <label style="margin:0;color:#fff">Tenant
-    <input id="tenant" data-testid="tenant" value="demo" style="width:140px">
+  <label style="margin:0;color:#fff">API key
+    <input id="api-key" data-testid="api-key" type="password" autocomplete="off" placeholder="ntf_..." style="width:260px">
   </label>
+  <span id="auth-state" data-testid="auth-state" style="font-size:13px"></span>
 </header>
 <main>
   <section id="templates-section">
@@ -70,8 +71,10 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const tenant = () => $('tenant').value.trim();
-const hdr = extra => Object.assign({ 'Content-Type': 'application/json', 'X-Tenant-Id': tenant() }, extra || {});
+// The tenant is derived server-side from the API key; the UI never sends a tenant id.
+const apiKey = () => $('api-key').value.trim();
+const hdr = extra => Object.assign({ 'Content-Type': 'application/json', 'X-API-Key': apiKey() }, extra || {});
+try { $('api-key').value = sessionStorage.getItem('apiKey') || ''; } catch (e) { /* storage unavailable */ }
 let editingId = null;
 
 function show(el, text, ok) { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); }
@@ -81,7 +84,8 @@ function cell(tr, text) { const td = document.createElement('td'); td.textConten
 async function loadTemplates() {
   const res = await fetch('/api/v1/templates', { headers: hdr() });
   const body = $('t-rows'); body.innerHTML = '';
-  if (!res.ok) { show($('t-msg'), await err(res), false); return; }
+  $('auth-state').textContent = res.ok ? 'authenticated' : (res.status === 401 ? 'enter a valid API key' : '');
+  if (!res.ok) { show($('t-msg'), res.status + ' ' + await err(res), false); return; }
   for (const t of await res.json()) {
     const tr = document.createElement('tr');
     tr.dataset.name = t.name;
@@ -108,6 +112,7 @@ $('s-send').onclick = async () => {
   const payload = { channels: [ch], priority: $('s-priority').value, recipients, variables: vars,
     templateName: $('s-template').value || null, body: $('s-body').value || null, subject: null };
   const extra = $('s-idem').value ? { 'Idempotency-Key': $('s-idem').value } : {};
+  show($('s-msg'), 'Sending...', true);
   const res = await fetch('/api/v1/notifications', { method: 'POST', headers: hdr(extra), body: JSON.stringify(payload) });
   if (res.ok) { const j = await res.json(); show($('s-msg'), (j.duplicate ? 'Duplicate of ' : 'Accepted ') + j.id, true); loadDeliveries(); }
   else show($('s-msg'), res.status + ' ' + await err(res), false);
@@ -124,7 +129,10 @@ async function loadDeliveries() {
   }
 }
 $('d-refresh').onclick = loadDeliveries;
-$('tenant').onchange = () => { loadTemplates(); loadDeliveries(); };
+$('api-key').onchange = () => {
+  try { sessionStorage.setItem('apiKey', apiKey()); } catch (e) { /* ignore */ }
+  loadTemplates(); loadDeliveries();
+};
 loadTemplates(); loadDeliveries();
 setInterval(loadDeliveries, 3000);
 </script>

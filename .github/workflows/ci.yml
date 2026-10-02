@@ -30,6 +30,8 @@ jobs:
         with: { distribution: temurin, java-version: '21', cache: maven }
       - name: Integration tests (Testcontainers) and coverage
         run: mvn -B -ntp verify
+      - name: Verify integration tests really ran (not skipped)
+        run: scripts/verify-reports.sh 12
       - name: Upload coverage and failsafe reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -54,9 +56,10 @@ jobs:
         run: |
           mvn -B -ntp -DskipTests package
           nohup java -jar target/multitenant-notification-service-0.1.0.jar \
-            --notification.rate-limit.tenants.e2e-ratelimited.capacity=3 --notification.rate-limit.tenants.e2e-ratelimited.refill-per-second=0.01 --notification.retry.initial-delay=500ms --notification.retry.max-retries=2 \
+            --notification.rate-limit.tenants.e2e-ratelimited.capacity=3 --notification.rate-limit.tenants.e2e-ratelimited.refill-per-second=0.01 --notification.security.admin-token=e2e-admin-token --notification.retry.initial-delay=500ms --notification.retry.max-retries=2 \
             > app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && break; sleep 2; done
+          curl -sf localhost:8080/actuator/health | grep -q '"status":"UP"'
       - name: Install Playwright
         working-directory: e2e
         run: npm ci && npx playwright install --with-deps chromium

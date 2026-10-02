@@ -1,6 +1,9 @@
 package com.example.notification.it;
 
+import static io.restassured.RestAssured.given;
+
 import io.restassured.RestAssured;
+import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +26,8 @@ import org.testcontainers.utility.DockerImageName;
         "notification.retry.jitter=0",
         "notification.rate-limit.tenants.ratelimited.capacity=3",
         "notification.rate-limit.tenants.ratelimited.refill-per-second=0.01",
+        "notification.security.admin-token=it-admin-token",
+        "notification.security.bootstrap-keys.boot-tenant=ntf_bootstrap_key_for_boot_tenant",
         "notification.quota.tenants.quotatenant=2",
         "notification.rate-limit.tenants.quotatenant.capacity=100",
         "notification.rate-limit.tenants.quotatenant.refill-per-second=100"
@@ -57,6 +62,21 @@ abstract class AbstractIntegrationTest {
     void rest() {
         RestAssured.baseURI = "http://localhost";
         RestAssured.port = port;
+    }
+
+    static final java.util.Map<String, String> KEYS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Issues (once per tenant) a real API key through the admin API. */
+    static String keyFor(String tenant) {
+        return KEYS.computeIfAbsent(tenant, t -> given().header("X-Admin-Token", "it-admin-token")
+                .contentType(io.restassured.http.ContentType.JSON)
+                .body("{\"tenantId\":\"" + t + "\",\"name\":\"it\"}")
+                .post("/api/v1/admin/api-keys").then().statusCode(201).extract().path("apiKey"));
+    }
+
+    /** Request authenticated as the given tenant. */
+    static RequestSpecification as(String tenant) {
+        return given().header("X-API-Key", keyFor(tenant));
     }
 
     static String uniq(String p) { return p + "-" + java.util.UUID.randomUUID().toString().substring(0, 8); }

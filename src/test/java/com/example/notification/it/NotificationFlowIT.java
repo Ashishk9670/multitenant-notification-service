@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 class NotificationFlowIT extends AbstractIntegrationTest {
 
     private Response send(String tenant, String idem, String recipient, String priority) {
-        var req = given().header("X-Tenant-Id", tenant).contentType(ContentType.JSON);
+        var req = as(tenant).contentType(ContentType.JSON);
         if (idem != null) req = req.header("Idempotency-Key", idem);
         return req.body("""
                 {"channels":["EMAIL"],"priority":"%s","recipients":{"email":"%s"},"subject":"Hi","body":"Hello {{n|there}}"}"""
@@ -20,7 +20,7 @@ class NotificationFlowIT extends AbstractIntegrationTest {
     }
 
     private String statusOf(String tenant, String id) {
-        return given().header("X-Tenant-Id", tenant).get("/api/v1/notifications/" + id)
+        return as(tenant).get("/api/v1/notifications/" + id)
                 .then().statusCode(200).extract().path("[0].status");
     }
 
@@ -30,7 +30,7 @@ class NotificationFlowIT extends AbstractIntegrationTest {
         for (String p : new String[] {"HIGH", "NORMAL", "LOW"}) {
             String id = send(tenant, null, "ok@example.com", p).then().statusCode(202).extract().path("id");
             await().atMost(Duration.ofSeconds(30)).until(() -> {
-                var l = given().header("X-Tenant-Id", tenant).get("/api/v1/notifications/" + id).path("[0].status");
+                var l = as(tenant).get("/api/v1/notifications/" + id).path("[0].status");
                 return "SENT".equals(l);
             });
         }
@@ -39,11 +39,11 @@ class NotificationFlowIT extends AbstractIntegrationTest {
     @Test
     void fansOutToMultipleChannels() {
         String tenant = uniq("t");
-        String id = given().header("X-Tenant-Id", tenant).contentType(ContentType.JSON).body("""
+        String id = as(tenant).contentType(ContentType.JSON).body("""
                 {"channels":["EMAIL","SMS","PUSH"],"recipients":{"email":"a@b.com","phone":"+1555","deviceToken":"tok"},"body":"x"}""")
                 .post("/api/v1/notifications").then().statusCode(202).extract().path("id");
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
-                given().header("X-Tenant-Id", tenant).get("/api/v1/notifications/" + id)
+                as(tenant).get("/api/v1/notifications/" + id)
                         .then().body("status", everyItem(equalTo("SENT"))).body("size()", equalTo(3)));
     }
 
@@ -78,8 +78,8 @@ class NotificationFlowIT extends AbstractIntegrationTest {
         String tenant = uniq("t");
         String id = send(tenant, null, "flaky@example.com", "NORMAL").then().statusCode(202).extract().path("id");
         await().atMost(Duration.ofSeconds(40)).until(() -> "SENT".equals(
-                given().header("X-Tenant-Id", tenant).get("/api/v1/notifications/" + id).path("[0].status")));
-        given().header("X-Tenant-Id", tenant).get("/api/v1/notifications/" + id).then().body("[0].attempts", equalTo(2));
+                as(tenant).get("/api/v1/notifications/" + id).path("[0].status")));
+        as(tenant).get("/api/v1/notifications/" + id).then().body("[0].attempts", equalTo(2));
     }
 
     @Test
@@ -87,7 +87,7 @@ class NotificationFlowIT extends AbstractIntegrationTest {
         String tenant = uniq("t");
         String id = send(tenant, null, "fail@example.com", "NORMAL").then().statusCode(202).extract().path("id");
         await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
-                given().header("X-Tenant-Id", tenant).get("/api/v1/notifications/" + id).then()
+                as(tenant).get("/api/v1/notifications/" + id).then()
                         .body("[0].status", equalTo("DEAD")).body("[0].attempts", equalTo(3))
                         .body("[0].lastError", containsString("Stub provider")));
     }
