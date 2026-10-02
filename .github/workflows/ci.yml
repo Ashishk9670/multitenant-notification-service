@@ -81,3 +81,23 @@ jobs:
       - name: Stop infrastructure
         if: always()
         run: docker compose down -v
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image and start the full stack (compose profile app)
+        run: docker compose --profile app up -d --build --wait
+      - name: Container runs as non-root
+        run: |
+          uid=$(docker compose exec -T app id -u)
+          echo "uid=$uid"; [ "$uid" != "0" ]
+      - name: Smoke test
+        run: ADMIN_TOKEN=dev-admin-token scripts/smoke.sh
+      - name: Dump logs
+        if: failure()
+        run: docker compose --profile app logs --no-color | tail -300
+      - name: Stop
+        if: always()
+        run: docker compose --profile app down -v

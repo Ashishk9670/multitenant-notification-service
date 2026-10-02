@@ -15,7 +15,7 @@ public class ApiKey {
     private String name;
     @Column(name = "key_prefix", nullable = false)
     private String keyPrefix;
-    @Column(name = "key_hash", nullable = false, columnDefinition = "char(64)")
+    @Column(name = "key_hash", nullable = false, length = 64)
     private String keyHash;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
