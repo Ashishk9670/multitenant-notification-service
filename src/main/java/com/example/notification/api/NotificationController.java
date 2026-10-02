@@ -8,6 +8,7 @@ import com.example.notification.service.NotificationService;
 import com.example.notification.security.TenantPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +35,7 @@ public class NotificationController {
     @PostMapping("/notifications")
     public ResponseEntity<NotificationAccepted> submit(
             @AuthenticationPrincipal TenantPrincipal tenant,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "Idempotency-Key", required = false) @Size(max = 128) String idempotencyKey,
             @Valid @RequestBody NotificationRequest request) {
         NotificationAccepted res = service.submit(tenant.tenantId(), idempotencyKey, request);
         return ResponseEntity.status(res.duplicate() ? HttpStatus.OK : HttpStatus.ACCEPTED).body(res);

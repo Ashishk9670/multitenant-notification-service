@@ -166,4 +166,29 @@ class ApiControllersTest {
         mvc.perform(delete("/api/v1/templates/" + UUID.randomUUID()).header("X-API-Key", KEY))
                 .andExpect(status().isNoContent());
     }
+
+    @Test
+    void oversizedPayloadIs413() throws Exception {
+        String big = "{\"channels\":[\"EMAIL\"],\"recipients\":{\"email\":\"a@b.com\"},\"body\":\"" + "x".repeat(70_000) + "\"}";
+        mvc.perform(post("/api/v1/notifications").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content(big))
+                .andExpect(status().isPayloadTooLarge());
+    }
+
+    @Test
+    void fieldLimitsAreEnforced() throws Exception {
+        String tooLongBody = "{\"channels\":[\"EMAIL\"],\"recipients\":{\"email\":\"a@b.com\"},\"body\":\"" + "x".repeat(10_001) + "\"}";
+        mvc.perform(post("/api/v1/notifications").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content(tooLongBody))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("body")));
+        mvc.perform(post("/api/v1/notifications").header("X-API-Key", KEY).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"channels\":[\"SMS\"],\"recipients\":{\"phone\":\"<script>\"},\"body\":\"x\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/notifications").header("X-API-Key", KEY).header("Idempotency-Key", "k".repeat(129))
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/notifications").header("X-API-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON).content("{not json"))
+                .andExpect(status().isBadRequest());
+    }
 }

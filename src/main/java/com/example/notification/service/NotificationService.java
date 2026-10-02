@@ -28,10 +28,11 @@ public class NotificationService {
     private final QuotaService quota;
     private final KafkaTemplate<String, Object> kafka;
     private final NotificationProperties props;
+    private final NotificationMetrics metrics;
 
     public NotificationService(TemplateService templates, TemplateRenderer renderer, IdempotencyService idempotency,
                                RateLimiter rateLimiter, QuotaService quota, KafkaTemplate<String, Object> kafka,
-                               NotificationProperties props) {
+                               NotificationProperties props, NotificationMetrics metrics) {
         this.templates = templates;
         this.renderer = renderer;
         this.idempotency = idempotency;
@@ -39,6 +40,7 @@ public class NotificationService {
         this.quota = quota;
         this.kafka = kafka;
         this.props = props;
+        this.metrics = metrics;
     }
 
     public NotificationAccepted submit(String tenantId, String idempotencyKey, NotificationRequest req) {
@@ -58,14 +60,17 @@ public class NotificationService {
         try {
             RateLimiter.Decision d = rateLimiter.tryAcquire(tenantId);
             if (!d.allowed()) {
+                metrics.rejected(tenantId, "rate_limited");
                 throw new ApiException.RateLimited("Rate limit exceeded for tenant", d.retryAfterMillis());
             }
             if (!quota.tryConsume(tenantId)) {
+                metrics.rejected(tenantId, "quota_exceeded");
                 throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "Daily quota exhausted for tenant");
             }
             consumedQuota = true;
             NotificationEvent event = new NotificationEvent(id, tenantId, priority, contents, req.recipients(), Instant.now());
             kafka.send(KafkaConfig.topicFor(props, priority), tenantId + ":" + id, event).get(10, TimeUnit.SECONDS);
+            metrics.accepted(tenantId, priority);
             return new NotificationAccepted(id, false);
         } catch (ApiException e) {
             rollback(tenantId, idempotencyKey, reserved, consumedQuota);
@@ -75,6 +80,7 @@ public class NotificationService {
             rollback(tenantId, idempotencyKey, reserved, consumedQuota);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Interrupted while publishing");
         } catch (Exception e) {
+            metrics.rejected(tenantId, "publish_failed");
             rollback(tenantId, idempotencyKey, reserved, consumedQuota);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to publish notification");
         }

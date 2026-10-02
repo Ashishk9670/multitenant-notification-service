@@ -29,13 +29,15 @@ class ChannelConsumersTest {
     NotificationProperties props = new NotificationProperties(
             new NotificationProperties.Topics("h", "n", "l", "ch.email", "ch.sms", "ch.push", "retry", "retry.*", "dlq"),
             null, new NotificationProperties.Retry(2, Duration.ofSeconds(1), 2.0, Duration.ofMinutes(1), 0), null, null, null);
+    io.micrometer.core.instrument.simple.SimpleMeterRegistry registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    com.example.notification.service.NotificationMetrics metrics = new com.example.notification.service.NotificationMetrics(registry);
     ChannelConsumers consumers;
 
     @BeforeEach
     void setUp() {
         when(email.channel()).thenReturn(Channel.EMAIL);
         Backoff backoff = new Backoff(Duration.ofSeconds(1), 2.0, Duration.ofMinutes(1), 0, () -> 0.5);
-        consumers = new ChannelConsumers(List.of(email), kafka, props, backoff, log);
+        consumers = new ChannelConsumers(List.of(email), kafka, props, backoff, log, metrics);
     }
 
     private DeliveryEvent event(int attempt) {
@@ -48,6 +50,7 @@ class ChannelConsumersTest {
         verify(email).send(any());
         verify(log).record(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.SENT), org.mockito.ArgumentMatchers.isNull());
         verifyNoInteractions(kafka);
+        assertThat(registry.counter("notifications.sent", "tenant", "acme", "channel", "EMAIL").count()).isEqualTo(1.0);
     }
 
     @Test
@@ -63,6 +66,9 @@ class ChannelConsumersTest {
         long notBefore = ByteBuffer.wrap(rec.headers().lastHeader(Headers.NOT_BEFORE).value()).getLong();
         assertThat(notBefore).isBetween(before + 1000, System.currentTimeMillis() + 1000);
         verify(log).record(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.RETRYING), any());
+        assertThat(registry.counter("notifications.failed", "tenant", "acme", "channel", "EMAIL").count()).isEqualTo(1.0);
+        assertThat(registry.counter("notifications.retried", "tenant", "acme", "channel", "EMAIL").count()).isEqualTo(1.0);
+        assertThat(registry.counter("notifications.dlq", "tenant", "acme", "channel", "EMAIL").count()).isZero();
     }
 
     @Test
@@ -85,6 +91,8 @@ class ChannelConsumersTest {
         verify(kafka).send(org.mockito.ArgumentMatchers.eq("dlq"), org.mockito.ArgumentMatchers.anyString(), cap.capture());
         assertThat(((DeliveryEvent) cap.getValue()).lastError()).contains("boom");
         verify(log).record(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.DEAD), any());
+        assertThat(registry.counter("notifications.dlq", "tenant", "acme", "channel", "EMAIL").count()).isEqualTo(1.0);
+        assertThat(registry.counter("notifications.retried", "tenant", "acme", "channel", "EMAIL").count()).isZero();
     }
 
     @Test

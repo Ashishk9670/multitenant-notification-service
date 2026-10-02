@@ -7,6 +7,7 @@ import com.example.notification.sender.NotificationSender;
 import com.example.notification.service.Backoff;
 import com.example.notification.service.DeliveryLogService;
 import com.example.notification.service.DeliveryStatus;
+import com.example.notification.service.NotificationMetrics;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.EnumMap;
@@ -32,14 +33,17 @@ public class ChannelConsumers {
     private final NotificationProperties props;
     private final Backoff backoff;
     private final DeliveryLogService deliveryLog;
+    private final NotificationMetrics metrics;
 
     public ChannelConsumers(List<NotificationSender> senderList, KafkaTemplate<String, Object> kafka,
-                            NotificationProperties props, Backoff backoff, DeliveryLogService deliveryLog) {
+                            NotificationProperties props, Backoff backoff, DeliveryLogService deliveryLog,
+                            NotificationMetrics metrics) {
         senderList.forEach(s -> senders.put(s.channel(), s));
         this.kafka = kafka;
         this.props = props;
         this.backoff = backoff;
         this.deliveryLog = deliveryLog;
+        this.metrics = metrics;
     }
 
     @KafkaListener(topics = "${notification.topics.email}", groupId = "channel-email", concurrency = "3")
@@ -68,6 +72,7 @@ public class ChannelConsumers {
         try {
             senders.get(e.channel()).send(e);
             deliveryLog.record(e, DeliveryStatus.SENT, null);
+            metrics.sent(e.tenantId(), e.channel());
         } catch (Exception ex) {
             handleFailure(e, ex);
         }
@@ -77,15 +82,18 @@ public class ChannelConsumers {
         int next = e.attempt() + 1;
         String err = ex.getClass().getSimpleName() + ": " + ex.getMessage();
         DeliveryEvent failed = e.withAttempt(next, err);
+        metrics.failed(e.tenantId(), e.channel());
         if (next > props.retry().maxRetries()) {
             log.warn("Delivery {} {} exhausted retries, sending to DLQ: {}", e.id(), e.channel(), err);
             deliveryLog.record(failed, DeliveryStatus.DEAD, err);
+            metrics.deadLettered(e.tenantId(), e.channel());
             kafka.send(props.topics().dlq(), e.tenantId() + ":" + e.id(), failed);
             return;
         }
         Duration delay = backoff.delayFor(next);
         log.info("Delivery {} {} failed (attempt {}), retry in {}", e.id(), e.channel(), next, delay);
         deliveryLog.record(failed, DeliveryStatus.RETRYING, err);
+        metrics.retried(e.tenantId(), e.channel());
         ProducerRecord<String, Object> rec = new ProducerRecord<>(props.topics().retryPrefix() + "." + next,
                 e.tenantId() + ":" + e.id(), failed);
         rec.headers().add(Headers.NOT_BEFORE, ByteBuffer.allocate(Long.BYTES)

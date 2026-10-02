@@ -32,7 +32,7 @@ public class TemplateController {
     }
 
     public record TemplateRequest(@NotBlank @Size(max = 128) String name, @NotNull Channel channel,
-                                  @Size(max = 512) String subject, @NotBlank String body) { }
+                                  @Size(max = 512) String subject, @NotBlank @Size(max = 10_000) String body) { }
 
     public record TemplateView(UUID id, String name, Channel channel, String subject, String body,
                                Instant createdAt, Instant updatedAt) {
@@ -42,7 +42,7 @@ public class TemplateController {
         }
     }
 
-    public record PreviewRequest(Map<String, String> variables) { }
+    public record PreviewRequest(@Size(max = 50) Map<@Size(max = 64) String, @Size(max = 2000) String> variables) { }
 
     public record PreviewResponse(String subject, String body) { }
 
@@ -79,7 +79,7 @@ public class TemplateController {
 
     @PostMapping("/{id}/preview")
     public PreviewResponse preview(@AuthenticationPrincipal TenantPrincipal tenant,
-                                   @PathVariable UUID id, @RequestBody PreviewRequest r) {
+                                   @PathVariable UUID id, @Valid @RequestBody PreviewRequest r) {
         MessageTemplate t = service.get(tenant.tenantId(), id);
         try {
             return new PreviewResponse(renderer.render(t.getSubject(), r.variables()), renderer.render(t.getBody(), r.variables()));

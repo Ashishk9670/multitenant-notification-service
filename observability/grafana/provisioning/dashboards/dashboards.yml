@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: notification
+    folder: Notification Service
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

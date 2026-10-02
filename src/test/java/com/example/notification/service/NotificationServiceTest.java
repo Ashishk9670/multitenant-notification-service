@@ -32,11 +32,13 @@ class NotificationServiceTest {
     NotificationProperties props = new NotificationProperties(
             new NotificationProperties.Topics("t.high", "t.normal", "t.low", "e", "s", "p", "r", "r.*", "dlq"),
             null, null, null, null, null);
+    io.micrometer.core.instrument.simple.SimpleMeterRegistry registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    NotificationMetrics metrics = new NotificationMetrics(registry);
     NotificationService service;
 
     @BeforeEach
     void setUp() {
-        service = new NotificationService(templates, new TemplateRenderer(), idem, limiter, quota, kafka, props);
+        service = new NotificationService(templates, new TemplateRenderer(), idem, limiter, quota, kafka, props, metrics);
         when(limiter.tryAcquire(any())).thenReturn(new RateLimiter.Decision(true, 5, 0));
         when(quota.tryConsume(any())).thenReturn(true);
         when(kafka.send(anyString(), anyString(), any())).thenReturn(CompletableFuture.completedFuture(null));
@@ -57,6 +59,7 @@ class NotificationServiceTest {
         NotificationEvent ev = (NotificationEvent) captor.getValue();
         assertThat(ev.contents().get(Channel.EMAIL).body()).isEqualTo("Hello Ann");
         assertThat(ev.contents().get(Channel.EMAIL).subject()).isEqualTo("Subj Ann");
+        assertThat(registry.counter("notifications.accepted", "tenant", "acme", "priority", "HIGH").count()).isEqualTo(1.0);
     }
 
     private static String startsWith(String prefix) {
@@ -84,6 +87,7 @@ class NotificationServiceTest {
                 .isInstanceOf(ApiException.RateLimited.class)
                 .hasFieldOrPropertyWithValue("retryAfterMillis", 1500L);
         verify(idem).release("acme", "k1");
+        assertThat(registry.counter("notifications.rejected", "tenant", "acme", "reason", "rate_limited").count()).isEqualTo(1.0);
         verifyNoInteractions(kafka);
         verify(quota, never()).tryConsume(any());
     }

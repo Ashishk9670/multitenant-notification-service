@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # `app` = containerised service (compose profile `app`); host.docker.internal = `mvn spring-boot:run` on the host
+      - targets: ['app:8080', 'host.docker.internal:8080']
