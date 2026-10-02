@@ -1,0 +1,176 @@
+asyncapi: 3.0.0
+info:
+  title: Multi-Tenant Notification Service - Event Contract
+  version: 0.1.0
+  description: |
+    Kafka event contract. REST ingestion is documented separately via OpenAPI (/v3/api-docs, /swagger-ui.html).
+    Flow: REST -> priority topic (NotificationEvent) -> router fan-out -> channel topic (DeliveryEvent)
+    -> on failure retry topic N (with x-not-before header) -> channel topic again -> after max retries DLQ.
+    Messages are JSON; Spring type headers (__TypeId__) are added by the producer.
+defaultContentType: application/json
+servers:
+  local:
+    host: localhost:9092
+    protocol: kafka
+channels:
+  notificationsHigh:
+    address: notifications.high
+    description: HIGH priority ingest topic (6 partitions, 6 consumer threads by default). Key is "{tenantId}:{notificationId}".
+    messages:
+      notificationEvent: { $ref: '#/components/messages/NotificationEvent' }
+  notificationsNormal:
+    address: notifications.normal
+    description: NORMAL priority ingest topic (3 partitions / threads).
+    messages:
+      notificationEvent: { $ref: '#/components/messages/NotificationEvent' }
+  notificationsLow:
+    address: notifications.low
+    description: LOW priority ingest topic (1 partition / thread).
+    messages:
+      notificationEvent: { $ref: '#/components/messages/NotificationEvent' }
+  channelEmail:
+    address: notifications.channel.email
+    messages:
+      deliveryEvent: { $ref: '#/components/messages/DeliveryEvent' }
+  channelSms:
+    address: notifications.channel.sms
+    messages:
+      deliveryEvent: { $ref: '#/components/messages/DeliveryEvent' }
+  channelPush:
+    address: notifications.channel.push
+    messages:
+      deliveryEvent: { $ref: '#/components/messages/DeliveryEvent' }
+  retry:
+    address: notifications.retry.{attempt}
+    description: One topic per retry attempt (notifications.retry.1 .. N). The retry consumer waits until x-not-before, then re-publishes to the channel topic.
+    parameters:
+      attempt:
+        description: 1-based retry number.
+    messages:
+      deliveryEvent: { $ref: '#/components/messages/RetryDeliveryEvent' }
+  dlq:
+    address: notifications.dlq
+    description: Dead letter topic for deliveries that exhausted retries; lastError holds the final failure.
+    messages:
+      deliveryEvent: { $ref: '#/components/messages/DeliveryEvent' }
+operations:
+  publishNotification:
+    action: send
+    title: API publishes accepted notification (priority chosen from request)
+    channel: { $ref: '#/channels/notificationsNormal' }
+    messages: [ { $ref: '#/channels/notificationsNormal/messages/notificationEvent' } ]
+  routeHigh:
+    action: receive
+    channel: { $ref: '#/channels/notificationsHigh' }
+    messages: [ { $ref: '#/channels/notificationsHigh/messages/notificationEvent' } ]
+  routeNormal:
+    action: receive
+    channel: { $ref: '#/channels/notificationsNormal' }
+    messages: [ { $ref: '#/channels/notificationsNormal/messages/notificationEvent' } ]
+  routeLow:
+    action: receive
+    channel: { $ref: '#/channels/notificationsLow' }
+    messages: [ { $ref: '#/channels/notificationsLow/messages/notificationEvent' } ]
+  fanOutEmail:
+    action: send
+    channel: { $ref: '#/channels/channelEmail' }
+    messages: [ { $ref: '#/channels/channelEmail/messages/deliveryEvent' } ]
+  fanOutSms:
+    action: send
+    channel: { $ref: '#/channels/channelSms' }
+    messages: [ { $ref: '#/channels/channelSms/messages/deliveryEvent' } ]
+  fanOutPush:
+    action: send
+    channel: { $ref: '#/channels/channelPush' }
+    messages: [ { $ref: '#/channels/channelPush/messages/deliveryEvent' } ]
+  consumeEmail:
+    action: receive
+    channel: { $ref: '#/channels/channelEmail' }
+    messages: [ { $ref: '#/channels/channelEmail/messages/deliveryEvent' } ]
+  consumeSms:
+    action: receive
+    channel: { $ref: '#/channels/channelSms' }
+    messages: [ { $ref: '#/channels/channelSms/messages/deliveryEvent' } ]
+  consumePush:
+    action: receive
+    channel: { $ref: '#/channels/channelPush' }
+    messages: [ { $ref: '#/channels/channelPush/messages/deliveryEvent' } ]
+  scheduleRetry:
+    action: send
+    channel: { $ref: '#/channels/retry' }
+    messages: [ { $ref: '#/channels/retry/messages/deliveryEvent' } ]
+  consumeRetry:
+    action: receive
+    channel: { $ref: '#/channels/retry' }
+    messages: [ { $ref: '#/channels/retry/messages/deliveryEvent' } ]
+  deadLetter:
+    action: send
+    channel: { $ref: '#/channels/dlq' }
+    messages: [ { $ref: '#/channels/dlq/messages/deliveryEvent' } ]
+components:
+  messages:
+    NotificationEvent:
+      name: NotificationEvent
+      title: Notification accepted by the API
+      contentType: application/json
+      payload: { $ref: '#/components/schemas/NotificationEvent' }
+    DeliveryEvent:
+      name: DeliveryEvent
+      title: Single-channel delivery unit
+      contentType: application/json
+      payload: { $ref: '#/components/schemas/DeliveryEvent' }
+    RetryDeliveryEvent:
+      name: RetryDeliveryEvent
+      title: DeliveryEvent waiting for retry
+      contentType: application/json
+      headers:
+        type: object
+        required: [x-not-before]
+        properties:
+          x-not-before:
+            type: integer
+            format: int64
+            description: Epoch millis (8-byte big-endian in the Kafka header) before which the event must not be redelivered.
+      payload: { $ref: '#/components/schemas/DeliveryEvent' }
+  schemas:
+    Channel: { type: string, enum: [EMAIL, SMS, PUSH] }
+    Priority: { type: string, enum: [HIGH, NORMAL, LOW] }
+    Recipients:
+      type: object
+      properties:
+        email: { type: [string, 'null'], format: email }
+        phone: { type: [string, 'null'] }
+        deviceToken: { type: [string, 'null'] }
+    Content:
+      type: object
+      required: [body]
+      properties:
+        subject: { type: [string, 'null'] }
+        body: { type: string }
+    NotificationEvent:
+      type: object
+      required: [id, tenantId, priority, contents, recipients, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        contents:
+          type: object
+          description: Rendered content per channel (keys are Channel values).
+          additionalProperties: { $ref: '#/components/schemas/Content' }
+        recipients: { $ref: '#/components/schemas/Recipients' }
+        createdAt: { type: string, format: date-time }
+    DeliveryEvent:
+      type: object
+      required: [id, tenantId, channel, priority, recipient, body, attempt, createdAt]
+      properties:
+        id: { type: string, format: uuid, description: Notification id (shared by all channel deliveries) }
+        tenantId: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        recipient: { type: string }
+        subject: { type: [string, 'null'] }
+        body: { type: string }
+        attempt: { type: integer, minimum: 0, description: Number of failed attempts so far }
+        createdAt: { type: string, format: date-time }
+        lastError: { type: [string, 'null'] }

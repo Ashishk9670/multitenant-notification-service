@@ -1,0 +1,79 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: multitenant-notification-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/notifications
+    username: notif
+    password: notif
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.example.notification.model
+
+notification:
+  topics:
+    high: notifications.high
+    normal: notifications.normal
+    low: notifications.low
+    email: notifications.channel.email
+    sms: notifications.channel.sms
+    push: notifications.channel.push
+    retry-prefix: notifications.retry
+    retry-pattern: notifications\.retry\..*
+    dlq: notifications.dlq
+  # consumer threads per priority; partitions per priority topic match these weights
+  consumers:
+    high: 6
+    normal: 3
+    low: 1
+  retry:
+    max-retries: 3
+    initial-delay: 2s
+    multiplier: 2.0
+    max-delay: 5m
+    jitter: 0.1
+  rate-limit:
+    capacity: 20
+    refill-per-second: 10
+    tenants:
+      acme: { capacity: 100, refill-per-second: 50 }
+  quota:
+    daily-limit: 10000
+    tenants:
+      acme: 100000
+  idempotency-ttl: 24h
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
