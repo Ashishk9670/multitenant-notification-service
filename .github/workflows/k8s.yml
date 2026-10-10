@@ -1,0 +1,22 @@
+name: Kubernetes manifests
+
+on:
+  push:
+    branches: [main]
+    paths: ['deploy/k8s/**', '.github/workflows/k8s.yml']
+  pull_request:
+    paths: ['deploy/k8s/**', '.github/workflows/k8s.yml']
+
+jobs:
+  kubeconform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sSfL --retry 3 https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate manifests against Kubernetes schemas
+        run: kubeconform -strict -summary -kubernetes-version 1.30.0 deploy/k8s
+      - name: Render kustomization
+        run: kubectl kustomize deploy/k8s | kubeconform -strict -summary -kubernetes-version 1.30.0 -
