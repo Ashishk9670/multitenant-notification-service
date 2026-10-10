@@ -7,7 +7,7 @@ COPY src src
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q -DskipTests package \
  && java -Djarmode=layertools -jar target/multitenant-notification-service-*.jar extract --destination /layers
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 RUN addgroup -S -g 10001 app && adduser -S -u 10001 -G app app
 WORKDIR /app
 COPY --from=build --chown=app:app /layers/dependencies/ ./
