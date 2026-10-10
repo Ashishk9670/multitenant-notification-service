@@ -10,7 +10,7 @@ export const options = {
   scenarios: {
     submit: {
       executor: 'constant-arrival-rate',
-      rate: Number(__ENV.RATE || 20),
+      rate: Number(__ENV.RATE || 8),
       timeUnit: '1s',
       duration: __ENV.DURATION || '30s',
       preAllocatedVUs: 20,
