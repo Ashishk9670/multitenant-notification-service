@@ -1,0 +1,28 @@
+name: Load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      rate:
+        description: Requests per second
+        default: '8'
+      duration:
+        description: Test duration
+        default: '30s'
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the full stack
+        run: docker compose --profile app up -d --build --wait
+      - uses: grafana/setup-k6-action@v1
+      - name: Run k6
+        run: k6 run -e RATE=${{ inputs.rate }} -e DURATION=${{ inputs.duration }} loadtest/notifications.js
+      - name: Dump logs
+        if: failure()
+        run: docker compose --profile app logs --no-color | tail -200
+      - name: Stop
+        if: always()
+        run: docker compose --profile app down -v
