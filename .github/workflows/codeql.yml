@@ -23,4 +23,12 @@ jobs:
       - name: Build
         run: mvn -B -ntp -DskipTests package
       - uses: github/codeql-action/analyze@v3
-        with: { category: /language:java }
+        with:
+          category: /language:java
+          # Code scanning upload needs GitHub Advanced Security on private repos; keep SARIF as an artifact.
+          upload: never
+          output: sarif-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: sarif-results
