@@ -1,27 +1,32 @@
 # Multi-Tenant Notification Service
 
+[![CI](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/codeql.yml/badge.svg)](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/codeql.yml)
+[![Trivy](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/trivy.yml/badge.svg)](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/trivy.yml)
+[![Kubernetes manifests](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/k8s.yml/badge.svg)](https://github.com/Ashishk9670/multitenant-notification-service/actions/workflows/k8s.yml)
+![Java 21](https://img.shields.io/badge/Java-21-blue)
+![Spring Boot 3](https://img.shields.io/badge/Spring%20Boot-3-brightgreen)
+
 Spring Boot 3 (Java 21, Maven) service that ingests notification requests over REST, validates and
 rate-limits them per tenant, and delivers them through Kafka to email / SMS / push channel consumers
 with priority-weighted consumption, retries with exponential backoff and a dead-letter topic.
 
 ## Architecture
 
-```
- client --X-Tenant-Id, Idempotency-Key--> REST API
-            validate -> render template (PostgreSQL) -> dedupe (Redis SETNX)
-                     -> rate limit (Redis token bucket) -> daily quota (Redis counter)
-                                   |
-                                   v
-         notifications.high (6 thr) / .normal (3) / .low (1)       <- priority topics, weighted consumers
-                                   |  PriorityRouter: one DeliveryEvent per channel
-                                   v
-   notifications.channel.email | .sms | .push  -> ChannelConsumers -> NotificationSender (log stubs)
-                                   | failure
-                                   v
-        notifications.retry.1 .. N  (header x-not-before = now + backoff(n))
-                                   | retry consumer waits, re-publishes to channel topic
-                                   v   after max retries
-                          notifications.dlq
+```mermaid
+flowchart TD
+    client([Client]) -->|X-API-Key, Idempotency-Key| api[REST API]
+    api --> validate[Validate and render template<br/>PostgreSQL]
+    validate --> dedupe[Dedupe<br/>Redis SETNX]
+    dedupe --> rate[Rate limit and daily quota<br/>Redis]
+    rate --> prio{{Priority topics<br/>high 6 thr / normal 3 / low 1}}
+    prio -->|PriorityRouter: one event per channel| ch[notifications.channel.email / sms / push]
+    ch --> cons[ChannelConsumers]
+    cons --> sender[NotificationSender]
+    cons -->|failure| retry[notifications.retry.1 .. N<br/>x-not-before backoff]
+    retry -->|retry consumer re-publishes| ch
+    retry -->|max retries exceeded| dlq[(notifications.dlq)]
+    cons -.->|status| db[(deliveries table<br/>PostgreSQL)]
 ```
 
 * **Priority**: three topics; partitions and listener threads follow the weights `6:3:1`
