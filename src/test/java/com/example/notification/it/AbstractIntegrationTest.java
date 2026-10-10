@@ -6,6 +6,7 @@ import io.restassured.RestAssured;
 import io.restassured.specification.RequestSpecification;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,6 +20,7 @@ import org.testcontainers.utility.DockerImageName;
 
 /** Real Kafka + Redis + Postgres via Testcontainers (skipped automatically when Docker is unavailable). */
 @Testcontainers(disabledWithoutDocker = true)
+@AutoConfigureObservability
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
         "notification.retry.initial-delay=200ms",

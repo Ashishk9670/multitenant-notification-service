@@ -21,5 +21,11 @@ for i in $(seq 1 60); do
   sleep 1
 done
 echo "$st" | grep -q '"status":"SENT"' || { echo "not delivered: $st"; exit 1; }
-curl -sf "$BASE_URL/actuator/prometheus" | grep -q "notifications_sent_total.*tenant=\"$tenant\"" || { echo "metric missing"; exit 1; }
+# Capture first: with pipefail, `curl | grep -q` can fail via SIGPIPE; also allow the counter a moment to appear.
+for i in $(seq 1 15); do
+  metrics=$(curl -sf "$BASE_URL/actuator/prometheus" || true)
+  echo "$metrics" | grep -q "notifications_sent_total.*tenant=\"$tenant\"" && break
+  sleep 1
+done
+echo "$metrics" | grep -q "notifications_sent_total.*tenant=\"$tenant\"" || { echo "metric missing"; exit 1; }
 echo "smoke OK"
