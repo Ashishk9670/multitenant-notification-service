@@ -79,6 +79,15 @@ notification:
     minimum-number-of-calls: 5
     wait-duration-in-open-state: 30s
     permitted-calls-in-half-open-state: 3
+  # delivery receipts posted to the tenant webhook (HMAC-signed, https only, SSRF-guarded)
+  webhook:
+    enabled: true
+    max-attempts: 5
+    initial-delay: 1s
+    multiplier: 2.0
+    max-delay: 5m
+    jitter: 0.1
+    timeout: 5s
 
 management:
   endpoints:

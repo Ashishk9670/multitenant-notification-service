@@ -31,6 +31,7 @@ class ChannelConsumersTest {
             null, new NotificationProperties.Retry(2, Duration.ofSeconds(1), 2.0, Duration.ofMinutes(1), 0), null, null, null);
     io.micrometer.core.instrument.simple.SimpleMeterRegistry registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
     com.example.notification.service.NotificationMetrics metrics = new com.example.notification.service.NotificationMetrics(registry);
+    com.example.notification.webhook.WebhookDispatcher receipts = mock(com.example.notification.webhook.WebhookDispatcher.class);
     ChannelConsumers consumers;
 
     @BeforeEach
@@ -39,7 +40,7 @@ class ChannelConsumersTest {
         Backoff backoff = new Backoff(Duration.ofSeconds(1), 2.0, Duration.ofMinutes(1), 0, () -> 0.5);
         consumers = new ChannelConsumers(List.of(email), kafka, props, backoff, log, metrics,
                 new com.example.notification.sender.ChannelCircuitBreakers(
-                        new com.example.notification.sender.CircuitBreakerProperties(true, 50, 20, 5, Duration.ofSeconds(30), 3), registry));
+                        new com.example.notification.sender.CircuitBreakerProperties(true, 50, 20, 5, Duration.ofSeconds(30), 3), registry), receipts);
     }
 
     private DeliveryEvent event(int attempt) {
@@ -52,6 +53,7 @@ class ChannelConsumersTest {
         verify(email).send(any());
         verify(log).record(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.SENT), org.mockito.ArgumentMatchers.isNull());
         verifyNoInteractions(kafka);
+        verify(receipts).publish(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.SENT), org.mockito.ArgumentMatchers.isNull());
         assertThat(registry.counter("notifications.sent", "tenant", "acme", "channel", "EMAIL").count()).isEqualTo(1.0);
     }
 
@@ -93,6 +95,7 @@ class ChannelConsumersTest {
         verify(kafka).send(org.mockito.ArgumentMatchers.eq("dlq"), org.mockito.ArgumentMatchers.anyString(), cap.capture());
         assertThat(((DeliveryEvent) cap.getValue()).lastError()).contains("boom");
         verify(log).record(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.DEAD), any());
+        verify(receipts).publish(any(), org.mockito.ArgumentMatchers.eq(DeliveryStatus.DEAD), any());
         assertThat(registry.counter("notifications.dlq", "tenant", "acme", "channel", "EMAIL").count()).isEqualTo(1.0);
         assertThat(registry.counter("notifications.retried", "tenant", "acme", "channel", "EMAIL").count()).isZero();
     }
