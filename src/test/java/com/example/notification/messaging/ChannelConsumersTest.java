@@ -37,7 +37,9 @@ class ChannelConsumersTest {
     void setUp() {
         when(email.channel()).thenReturn(Channel.EMAIL);
         Backoff backoff = new Backoff(Duration.ofSeconds(1), 2.0, Duration.ofMinutes(1), 0, () -> 0.5);
-        consumers = new ChannelConsumers(List.of(email), kafka, props, backoff, log, metrics);
+        consumers = new ChannelConsumers(List.of(email), kafka, props, backoff, log, metrics,
+                new com.example.notification.sender.ChannelCircuitBreakers(
+                        new com.example.notification.sender.CircuitBreakerProperties(true, 50, 20, 5, Duration.ofSeconds(30), 3), registry));
     }
 
     private DeliveryEvent event(int attempt) {

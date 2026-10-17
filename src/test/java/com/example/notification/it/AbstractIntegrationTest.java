@@ -26,6 +26,7 @@ import org.testcontainers.utility.DockerImageName;
         "notification.retry.initial-delay=200ms",
         "notification.retry.max-retries=2",
         "notification.retry.jitter=0",
+        "notification.circuit-breaker.enabled=false",
         "notification.rate-limit.tenants.ratelimited.capacity=3",
         "notification.rate-limit.tenants.ratelimited.refill-per-second=0.01",
         "notification.rate-limit.tenants.ratelimited-metrics.capacity=3",

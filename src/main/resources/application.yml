@@ -71,6 +71,14 @@ notification:
     tenants:
       acme: 100000
   idempotency-ttl: 24h
+  # one breaker per channel/provider; open breaker => fast failure => normal retry/DLQ flow
+  circuit-breaker:
+    enabled: true
+    failure-rate-threshold: 50
+    sliding-window-size: 20
+    minimum-number-of-calls: 5
+    wait-duration-in-open-state: 30s
+    permitted-calls-in-half-open-state: 3
 
 management:
   endpoints:

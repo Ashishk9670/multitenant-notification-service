@@ -3,6 +3,7 @@ package com.example.notification.messaging;
 import com.example.notification.config.NotificationProperties;
 import com.example.notification.model.Channel;
 import com.example.notification.model.DeliveryEvent;
+import com.example.notification.sender.ChannelCircuitBreakers;
 import com.example.notification.sender.NotificationSender;
 import com.example.notification.service.Backoff;
 import com.example.notification.service.DeliveryLogService;
@@ -34,16 +35,19 @@ public class ChannelConsumers {
     private final Backoff backoff;
     private final DeliveryLogService deliveryLog;
     private final NotificationMetrics metrics;
+    private final ChannelCircuitBreakers breakers;
 
     public ChannelConsumers(List<NotificationSender> senderList, KafkaTemplate<String, Object> kafka,
                             NotificationProperties props, Backoff backoff, DeliveryLogService deliveryLog,
-                            NotificationMetrics metrics) {
+                            NotificationMetrics metrics,
+                            ChannelCircuitBreakers breakers) {
         senderList.forEach(s -> senders.put(s.channel(), s));
         this.kafka = kafka;
         this.props = props;
         this.backoff = backoff;
         this.deliveryLog = deliveryLog;
         this.metrics = metrics;
+        this.breakers = breakers;
     }
 
     @KafkaListener(topics = "${notification.topics.email}", groupId = "channel-email", concurrency = "3")
@@ -70,7 +74,7 @@ public class ChannelConsumers {
 
     void deliver(DeliveryEvent e) {
         try {
-            senders.get(e.channel()).send(e);
+            breakers.send(senders.get(e.channel()), e);
             deliveryLog.record(e, DeliveryStatus.SENT, null);
             metrics.sent(e.tenantId(), e.channel());
         } catch (Exception ex) {
