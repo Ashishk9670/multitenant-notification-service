@@ -79,6 +79,33 @@ notification:
     minimum-number-of-calls: 5
     wait-duration-in-open-state: 30s
     permitted-calls-in-half-open-state: 3
+  # Provider per channel. Default "stub" logs only. Real adapters (opt-in, sandbox-friendly):
+  #   email: smtp (spring.mail.*) | ses ; sms: twilio ; push: fcm. Credentials via env vars, never committed.
+  provider:
+    timeout: 10s
+    email:
+      type: ${EMAIL_PROVIDER:stub}
+      smtp:
+        from: ${EMAIL_FROM:}
+      ses:
+        region: ${SES_REGION:}
+        access-key-id: ${SES_ACCESS_KEY_ID:}
+        secret-access-key: ${SES_SECRET_ACCESS_KEY:}
+        from: ${EMAIL_FROM:}
+        endpoint: ${SES_ENDPOINT:}
+    sms:
+      type: ${SMS_PROVIDER:stub}
+      twilio:
+        account-sid: ${TWILIO_ACCOUNT_SID:}
+        auth-token: ${TWILIO_AUTH_TOKEN:}
+        from: ${TWILIO_FROM:}
+        base-url: ${TWILIO_BASE_URL:https://api.twilio.com}
+    push:
+      type: ${PUSH_PROVIDER:stub}
+      fcm:
+        project-id: ${FCM_PROJECT_ID:}
+        access-token: ${FCM_ACCESS_TOKEN:}
+        base-url: ${FCM_BASE_URL:https://fcm.googleapis.com}
   # delivery receipts posted to the tenant webhook (HMAC-signed, https only, SSRF-guarded)
   webhook:
     enabled: true
