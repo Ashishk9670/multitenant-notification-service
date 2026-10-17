@@ -28,6 +28,8 @@ import org.testcontainers.utility.DockerImageName;
         "notification.retry.jitter=0",
         "notification.rate-limit.tenants.ratelimited.capacity=3",
         "notification.rate-limit.tenants.ratelimited.refill-per-second=0.01",
+        "notification.rate-limit.tenants.ratelimited-metrics.capacity=3",
+        "notification.rate-limit.tenants.ratelimited-metrics.refill-per-second=0.01",
         "notification.security.admin-token=it-admin-token",
         "notification.security.bootstrap-keys.boot-tenant=ntf_bootstrap_key_for_boot_tenant",
         "notification.quota.tenants.quotatenant=2",

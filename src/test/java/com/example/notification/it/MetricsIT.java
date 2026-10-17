@@ -46,7 +46,7 @@ class MetricsIT extends AbstractIntegrationTest {
 
     @Test
     void rateLimitRejectionsAreCounted() {
-        for (int i = 0; i < 3; i++) as("ratelimited").contentType(ContentType.JSON).body("""
+        for (int i = 0; i < 4; i++) as("ratelimited-metrics").contentType(ContentType.JSON).body("""
                 {"channels":["EMAIL"],"recipients":{"email":"ok@example.com"},"body":"x"}""").post("/api/v1/notifications");
         org.assertj.core.api.Assertions.assertThat(metrics()).contains("notifications_rejected_total");
     }
