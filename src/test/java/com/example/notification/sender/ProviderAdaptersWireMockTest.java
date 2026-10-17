@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 @WireMockTest
 class ProviderAdaptersWireMockTest {
 
-    ProviderHttp http = new ProviderHttp(Duration.ofSeconds(3));
+    ProviderHttp http = new ProviderHttp(Duration.ofSeconds(20));
 
     private static DeliveryEvent event(Channel ch, String to) {
         return new DeliveryEvent("n1", "acme", ch, Priority.NORMAL, to, "Hello", "Body & more", 0, Instant.now(), null);

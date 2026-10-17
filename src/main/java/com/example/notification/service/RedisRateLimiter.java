@@ -22,8 +22,8 @@ public class RedisRateLimiter implements RateLimiter {
             tokens = math.min(cap, tokens + elapsed * rate)
             local allowed = 0
             local retry = 0
-            if tokens >= 1 then
-              tokens = tokens - 1
+            if tokens >= 1 - 1e-9 then
+              tokens = math.max(0, tokens - 1)
               allowed = 1
             else
               retry = math.ceil((1 - tokens) / rate * 1000)

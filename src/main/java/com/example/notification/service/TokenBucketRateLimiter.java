@@ -37,8 +37,9 @@ public class TokenBucketRateLimiter implements RateLimiter {
             double elapsedSec = Math.max(0, now - b.lastRefillMillis) / 1000.0;
             b.tokens = Math.min(limit.capacity(), b.tokens + elapsedSec * limit.refillPerSecond());
             b.lastRefillMillis = now;
-            if (b.tokens >= 1.0) {
-                b.tokens -= 1.0;
+            // epsilon: waiting exactly the advertised retry-after must succeed despite floating point rounding
+            if (b.tokens >= 1.0 - 1e-9) {
+                b.tokens = Math.max(0.0, b.tokens - 1.0);
                 return new Decision(true, (long) Math.floor(b.tokens), 0);
             }
             long retry = (long) Math.ceil((1.0 - b.tokens) / limit.refillPerSecond() * 1000.0);

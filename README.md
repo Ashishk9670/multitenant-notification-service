@@ -39,7 +39,15 @@ flowchart TD
 * **Retry**: `delay(n) = min(max, initial * multiplier^(n-1)) +/- jitter`; one retry topic per attempt, then DLQ.
 * **Templates**: CRUD at `/api/v1/templates`, stored in PostgreSQL (JPA + Flyway); `{{var}}` and `{{var|default}}`.
 * **Delivery status**: every delivery is tracked in the `deliveries` table (ACCEPTED, SENT, RETRYING, DEAD).
-* **Stub providers**: log-only senders. A recipient containing `fail` always fails; `flaky` fails twice then succeeds.
+* **Stub providers (default)**: log-only senders. A recipient containing `fail` always fails; `flaky` fails twice then succeeds.
+* **Real providers (opt-in)**: `EMAIL_PROVIDER=smtp|ses`, `SMS_PROVIDER=twilio`, `PUSH_PROVIDER=fcm` plus credentials from env
+  (see `notification.provider.*` in `application.yml`). Channels not switched stay on stubs. See [ADR 0003](docs/adr/0003-provider-adapters-behind-config-flags.md).
+* **Circuit breakers**: one Resilience4j breaker per channel; state exported as `resilience4j_circuitbreaker_*`. See [ADR 0001](docs/adr/0001-circuit-breaker-per-channel.md).
+* **Delivery-receipt webhooks**: `PUT /api/v1/webhook {"url":"https://..."}` (https only, private/loopback/metadata addresses blocked),
+  signed with HMAC-SHA256 (`X-Webhook-Signature`, `X-Webhook-Timestamp`), retried with backoff. `GET`/`DELETE` `/api/v1/webhook`,
+  `POST /api/v1/webhook/rotate-secret`. See [ADR 0002](docs/adr/0002-signed-ssrf-safe-webhooks.md).
+* **Dashboards**: `docker compose --profile monitoring up -d` provisions Grafana (http://localhost:3000) with an overview dashboard and a
+  per-tenant dashboard (`Notification Service - Per Tenant`, pick a tenant from the variable).
 
 Contracts: [`asyncapi.yaml`](asyncapi.yaml) (Kafka events) and OpenAPI at `/v3/api-docs` / `/swagger-ui.html`.
 
@@ -67,7 +75,8 @@ The admin UI (`/`) manages templates, sends notifications and shows delivery sta
 
 | Layer | Command | Needs |
 |---|---|---|
-| Unit (JUnit 5, Mockito, MockMvc): rate limiter, backoff, rendering, ingest service, consumers/retry/DLQ, controllers | `mvn test` | nothing |
+| Unit (JUnit 5, Mockito, MockMvc, WireMock): rate limiter, backoff, rendering, ingest service, consumers/retry/DLQ, controllers, provider adapters, webhooks, circuit breakers | `mvn test` | nothing |
+| Property-based (jqwik): token bucket and backoff invariants. Architecture (ArchUnit): layering and coding rules | `mvn test` | nothing |
 | Integration + API (Testcontainers Kafka/Redis/Postgres, RestAssured): dedupe, rate limit, quota, retry, DLQ, templates | `mvn verify` | Docker |
 | E2E UI (Playwright, `e2e/`) | `make e2e` or `./scripts/e2e.sh` | Docker, Node 20+ |
 
