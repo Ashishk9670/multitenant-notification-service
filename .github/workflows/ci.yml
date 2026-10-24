@@ -166,6 +166,16 @@ jobs:
       - name: Run Playwright tests
         working-directory: e2e
         run: npx playwright test
+      - name: Capture README screenshots of the admin UI
+        working-directory: e2e
+        env:
+          ADMIN_TOKEN: e2e-admin-token
+        run: npx playwright test -c playwright.screenshots.config.js
+      - name: Upload admin UI screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-ui-screenshots
+          path: docs/img
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
