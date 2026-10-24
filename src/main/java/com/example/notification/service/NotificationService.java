@@ -50,7 +50,14 @@ public class NotificationService {
         String id = UUID.randomUUID().toString();
         boolean reserved = false;
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            Optional<String> existing = idempotency.reserve(tenantId, idempotencyKey, id);
+            Optional<String> existing;
+            try {
+                existing = idempotency.reserve(tenantId, idempotencyKey, id);
+            } catch (RuntimeException e) {
+                // Redis down: fail closed with a retryable 503 instead of leaking a 500
+                metrics.rejected(tenantId, "dependency_unavailable");
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Idempotency store unavailable");
+            }
             if (existing.isPresent()) {
                 return new NotificationAccepted(existing.get(), true);
             }
