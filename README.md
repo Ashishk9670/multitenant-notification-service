@@ -58,6 +58,19 @@ flowchart TD
 
 Contracts: [`asyncapi.yaml`](asyncapi.yaml) (Kafka events) and OpenAPI at `/v3/api-docs` / `/swagger-ui.html`.
 
+## Demo
+
+`make demo` builds and starts the whole stack in containers (Postgres, Redis, Kafka, app), then seeds a `demo` tenant with an API key
+(written to `.demo-key`), two templates and a few notifications. Open http://localhost:8080 and paste the key. `make demo-down` stops it.
+
+![Admin UI](docs/img/admin-ui-overview.png)
+
+| Templates | Delivery status |
+|---|---|
+| ![Templates](docs/img/admin-ui-templates.png) | ![Deliveries](docs/img/admin-ui-deliveries.png) |
+
+The images are produced by Playwright (`make screenshots`, also captured as a CI artifact).
+
 ## Run
 
 ```bash
@@ -94,12 +107,24 @@ The admin UI (`/`) manages templates, sends notifications and shows delivery sta
 | Unit (JUnit 5, Mockito, MockMvc, WireMock): rate limiter, backoff, rendering, ingest service, consumers/retry/DLQ, controllers, provider adapters, webhooks, circuit breakers | `mvn test` | nothing |
 | Property-based (jqwik): token bucket and backoff invariants. Architecture (ArchUnit): layering and coding rules | `mvn test` | nothing |
 | Integration + API (Testcontainers Kafka/Redis/Postgres, RestAssured): dedupe, rate limit, quota, retry, DLQ, templates | `mvn verify` | Docker |
+| Contract: Kafka events validated against the JSON schemas in `asyncapi.yaml`; consumer-driven webhook contract (`src/test/resources/contracts/`) | `mvn test` | nothing |
+| Mutation (PIT) on rate limiter, backoff, rendering, circuit breaker, webhook validator/signer; threshold in `.github/mutation-threshold` | `mvn -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage` (CI: `mutation.yml`, weekly + manual) | nothing |
+| Chaos (Toxiproxy): Redis then Kafka cut mid-run, asserts 503 fail-closed, recovery, no accepted notification lost | `mvn verify -Dit.groups=chaos -Dit.excludedGroups=` | Docker |
 | E2E UI (Playwright, `e2e/`) | `make e2e` or `./scripts/e2e.sh` | Docker, Node 20+ |
 
 `*IT` classes are skipped automatically when Docker is unavailable. Coverage (JaCoCo): `target/site/jacoco/index.html`
 after `mvn verify`. CI (`.github/workflows/ci.yml`) runs unit, integration and Playwright jobs and uploads the reports.
 
 Note: on JDK 25+ the build passes `-Dnet.bytebuddy.experimental=true` to Mockito's ByteBuddy; JDK 21 is the target.
+
+## Deployment and supply chain
+
+* Helm chart: [`deploy/helm/notification-service`](deploy/helm/notification-service) (linted and `kubeconform`-validated in CI). Secrets are never in the chart:
+  point `existingSecret` at a Secret created by [External Secrets or Sealed Secrets](deploy/helm/examples/). Argo CD Application:
+  [`deploy/argocd/application.yaml`](deploy/argocd/application.yaml). Plain manifests remain in `deploy/k8s`.
+* CI uploads a CycloneDX SBOM (`sbom-cyclonedx` artifact). The release workflow signs the image with cosign (keyless) and attaches the SBOM as an
+  attestation: `cosign verify-attestation --type cyclonedx --certificate-identity-regexp 'https://github.com/Ashishk9670/multitenant-notification-service/.*' --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/ashishk9670/multitenant-notification-service:<tag>`.
+  An OpenSSF Scorecard workflow runs weekly.
 
 ## Notes / limitations
 
