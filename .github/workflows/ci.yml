@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21', cache: maven }
-      - name: Chaos IT (Testcontainers + Toxiproxy: cut Redis, then Kafka)
+      - name: "Chaos IT (Testcontainers + Toxiproxy, cut Redis then Kafka)"
         run: mvn -B -ntp verify -Dtest=NoSuchTest -Dsurefire.failIfNoSpecifiedTests=false -Dit.groups=chaos -Dit.excludedGroups=
       - name: Verify chaos test really ran (not skipped)
         run: scripts/verify-reports.sh 1
