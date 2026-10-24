@@ -1,0 +1,2 @@
+notification-service {{ .Chart.AppVersion }} deployed as {{ include "notification-service.fullname" . }}.
+Secrets are read from the existing Secret "{{ include "notification-service.secretName" . }}" (keys: SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, NOTIFICATION_SECURITY_ADMIN_TOKEN).

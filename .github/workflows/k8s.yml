@@ -3,9 +3,9 @@ name: Kubernetes manifests
 on:
   push:
     branches: [main]
-    paths: ['deploy/k8s/**', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', '.github/workflows/k8s.yml']
   pull_request:
-    paths: ['deploy/k8s/**', '.github/workflows/k8s.yml']
+    paths: ['deploy/**', '.github/workflows/k8s.yml']
 
 jobs:
   kubeconform:
@@ -20,3 +20,34 @@ jobs:
         run: kubeconform -strict -summary -kubernetes-version 1.30.0 -ignore-filename-pattern "kustomization.yaml" deploy/k8s
       - name: Render kustomization
         run: kubectl kustomize deploy/k8s | kubeconform -strict -summary -kubernetes-version 1.30.0 -
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with: { version: v3.15.4 }
+      - name: Install kubeconform
+        run: |
+          curl -sSfL --retry 3 https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+      - name: helm lint (default and fully-enabled values)
+        run: |
+          helm lint deploy/helm/notification-service --strict
+          helm lint deploy/helm/notification-service --strict -f deploy/helm/examples/values-prod.example.yaml
+      - name: helm template | kubeconform (default values)
+        run: helm template notification deploy/helm/notification-service | kubeconform -strict -summary -kubernetes-version 1.30.0 -
+      - name: helm template | kubeconform (production example values, no HPA)
+        run: |
+          helm template notification deploy/helm/notification-service -f deploy/helm/examples/values-prod.example.yaml \
+            --set autoscaling.enabled=false --set secret.create=true --set secret.values.X=y \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 -
+      - name: Validate External Secrets, Sealed Secrets and Argo CD examples
+        run: |
+          kubeconform -strict -summary -kubernetes-version 1.30.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            deploy/helm/examples/external-secret.yaml deploy/helm/examples/sealed-secret.example.yaml deploy/argocd/application.yaml
+      - name: No real secrets in the chart
+        run: |
+          ! grep -rEn "(password|token)[A-Za-z_]*: *[\"']?[A-Za-z0-9+/=_-]{12,}" deploy/helm/notification-service/values.yaml
