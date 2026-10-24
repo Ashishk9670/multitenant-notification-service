@@ -58,18 +58,27 @@ docker compose up -d --wait        # Kafka, Redis, Postgres
 mvn spring-boot:run                # http://localhost:8080  (admin UI at /)
 ```
 
+Every `/api/v1/**` call needs a tenant API key (`X-API-Key` or `Authorization: Bearer`); the tenant is resolved from the
+key server-side. Keys are issued with the operator admin token (`X-Admin-Token`; `dev-admin-token` in docker-compose,
+override with `ADMIN_TOKEN`). The key is shown once and only its hash is stored.
+
 ```bash
-curl -X POST localhost:8080/api/v1/templates -H 'X-Tenant-Id: acme' -H 'Content-Type: application/json' \
+# 1. issue a key for tenant "acme" (operator only)
+KEY=$(curl -s -X POST localhost:8080/api/v1/admin/api-keys -H 'X-Admin-Token: dev-admin-token' \
+  -H 'Content-Type: application/json' -d '{"tenantId":"acme","name":"demo"}' | jq -r .apiKey)
+
+# 2. use it
+curl -X POST localhost:8080/api/v1/templates -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
   -d '{"name":"welcome","channel":"EMAIL","subject":"Hi {{name}}","body":"Welcome {{name}}!"}'
 
-curl -X POST localhost:8080/api/v1/notifications -H 'X-Tenant-Id: acme' -H 'Idempotency-Key: order-1' \
+curl -X POST localhost:8080/api/v1/notifications -H "X-API-Key: $KEY" -H 'Idempotency-Key: order-1' \
   -H 'Content-Type: application/json' \
   -d '{"channels":["EMAIL"],"priority":"HIGH","recipients":{"email":"a@b.com"},"templateName":"welcome","variables":{"name":"Ann"}}'
 
-curl -H 'X-Tenant-Id: acme' localhost:8080/api/v1/deliveries
+curl -H "X-API-Key: $KEY" localhost:8080/api/v1/deliveries
 ```
 
-The admin UI (`/`) manages templates, sends notifications and shows delivery status for the chosen tenant.
+The admin UI (`/`) manages templates, sends notifications and shows delivery status for the tenant whose API key you paste into the key field.
 
 ## Tests
 
@@ -89,4 +98,4 @@ Note: on JDK 25+ the build passes `-Dnet.bytebuddy.experimental=true` to Mockito
 
 * The retry consumer blocks until a message is due (simple and ordered; keep `max-delay` below `max.poll.interval.ms`).
 * Notification ids are not persisted at ingest time; delivery rows appear once the router consumes the event.
-* No authentication: tenant identity comes from the `X-Tenant-Id` header; put an API gateway in front for real use.
+* Authentication: tenant routes use hashed, revocable API keys (`X-API-Key`); `/api/v1/admin/**` (key management) uses the operator `X-Admin-Token`. Missing/invalid credentials return 401, wrong role 403. `notification.security.bootstrap-keys` pre-provisions keys for dev/test only. Terminate TLS in front of the service.
