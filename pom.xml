@@ -102,4 +102,61 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <!-- Mutation testing: mvn -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage (see .github/workflows/mutation.yml) -->
+    <profile>
+      <id>mutation</id>
+      <properties>
+        <mutation.threshold>0</mutation.threshold>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-maven</artifactId>
+            <version>1.17.4</version>
+            <dependencies>
+              <dependency>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-junit5-plugin</artifactId>
+                <version>1.2.1</version>
+              </dependency>
+            </dependencies>
+            <configuration>
+              <targetClasses>
+                <param>com.example.notification.service.TokenBucketRateLimiter</param>
+                <param>com.example.notification.service.Backoff</param>
+                <param>com.example.notification.template.TemplateRenderer</param>
+                <param>com.example.notification.sender.ChannelCircuitBreakers</param>
+                <param>com.example.notification.webhook.WebhookUrlValidator</param>
+                <param>com.example.notification.webhook.WebhookSigner</param>
+              </targetClasses>
+              <targetTests>
+                <param>com.example.notification.service.TokenBucketRateLimiterTest</param>
+                <param>com.example.notification.service.TokenBucketPropertyTest</param>
+                <param>com.example.notification.service.BackoffTest</param>
+                <param>com.example.notification.service.BackoffPropertyTest</param>
+                <param>com.example.notification.template.TemplateRendererTest</param>
+                <param>com.example.notification.sender.ChannelCircuitBreakersTest</param>
+                <param>com.example.notification.webhook.WebhookUrlValidatorTest</param>
+                <param>com.example.notification.webhook.WebhookSignerTest</param>
+                <param>com.example.notification.contract.WebhookConsumerContractTest</param>
+              </targetTests>
+              <mutationThreshold>${mutation.threshold}</mutationThreshold>
+              <threads>2</threads>
+              <timeoutConstant>8000</timeoutConstant>
+              <outputFormats>
+                <param>HTML</param>
+                <param>XML</param>
+              </outputFormats>
+              <timestampedReports>false</timestampedReports>
+              <jvmArgs>
+                <jvmArg>-Dnet.bytebuddy.experimental=true</jvmArg>
+              </jvmArgs>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

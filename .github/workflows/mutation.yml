@@ -1,0 +1,55 @@
+name: Mutation testing
+
+# Optional, slow: not part of the PR gate. Weekly + on demand.
+on:
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: 'Override mutation score threshold (percent). Empty = value from .github/mutation-threshold'
+        required: false
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  pit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - name: Resolve threshold
+        id: t
+        run: |
+          T="${{ github.event.inputs.threshold }}"
+          [ -n "$T" ] || T="$(tr -d '[:space:]' < .github/mutation-threshold)"
+          echo "threshold=$T" >> "$GITHUB_OUTPUT"
+          echo "Mutation threshold: $T%"
+      - name: PIT (rate limiter, backoff, template rendering, circuit breaker, webhook validator/signer)
+        run: mvn -B -ntp -Pmutation -Dmutation.threshold=${{ steps.t.outputs.threshold }} test-compile org.pitest:pitest-maven:mutationCoverage
+      - name: Summarise score
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import re, glob
+          f = glob.glob('target/pit-reports/mutations.xml')
+          if not f:
+              print('No PIT report produced'); raise SystemExit
+          x = open(f[0]).read()
+          st = re.findall(r'status="([A-Z_]+)"', x)
+          killed = sum(1 for s in st if s in ('KILLED','TIMED_OUT','MEMORY_ERROR','RUN_ERROR'))
+          total = len([s for s in st if s != 'NO_COVERAGE']) + st.count('NO_COVERAGE')
+          print(f'### PIT mutation score\n\n{killed}/{total} killed = {100*killed/max(total,1):.1f}%  (threshold ${{ steps.t.outputs.threshold }}%)')
+          by = {}
+          for s in st: by[s] = by.get(s, 0) + 1
+          print('\n' + ', '.join(f'{k}: {v}' for k, v in sorted(by.items())))
+          PY
+      - name: Upload PIT report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pit-report
+          path: target/pit-reports
