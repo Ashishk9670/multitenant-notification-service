@@ -1,0 +1,150 @@
+rule_files:
+  - ../alerts/notification-slo.yml
+evaluation_interval: 30s
+
+tests:
+  - interval: 1m
+    name: fast burn fires when 20% of terminal deliveries dead-letter, and not at 0.5%
+    input_series:
+      - series: 'notifications_sent_total{tenant="acme",channel="EMAIL"}'
+        values: '0+80x120'
+      - series: 'notifications_dlq_total{tenant="acme",channel="EMAIL"}'
+        values: '0+20x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: NotificationDeliverySuccessFastBurn
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: delivery-success }
+            exp_annotations:
+              summary: "Delivery success SLO burning fast (20% of deliveries dead-lettered)"
+              description: "At this rate the 30-day error budget is gone in about two days."
+              runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationDeliverySuccessFastBurn.md"
+
+  - interval: 1m
+    name: healthy delivery ratio raises nothing
+    input_series:
+      - series: 'notifications_sent_total{tenant="acme",channel="EMAIL"}'
+        values: '0+199x400'
+      - series: 'notifications_dlq_total{tenant="acme",channel="EMAIL"}'
+        values: '0+1x400'
+    alert_rule_test:
+      - eval_time: 6h
+        alertname: NotificationDeliverySuccessFastBurn
+        exp_alerts: []
+      - eval_time: 6h
+        alertname: NotificationDeliverySuccessSlowBurn
+        exp_alerts: []
+
+  - interval: 1m
+    name: no traffic means no SLO alert
+    input_series:
+      - series: 'notifications_sent_total{tenant="acme",channel="EMAIL"}'
+        values: '5x400'
+      - series: 'notifications_dlq_total{tenant="acme",channel="EMAIL"}'
+        values: '0x400'
+    alert_rule_test:
+      - eval_time: 6h
+        alertname: NotificationDeliverySuccessSlowBurn
+        exp_alerts: []
+
+  - interval: 1m
+    name: slow burn fires at 8% sustained
+    input_series:
+      - series: 'notifications_sent_total{tenant="acme",channel="SMS"}'
+        values: '0+92x420'
+      - series: 'notifications_dlq_total{tenant="acme",channel="SMS"}'
+        values: '0+8x420'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: NotificationDeliverySuccessSlowBurn
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: delivery-success }
+            exp_annotations:
+              summary: "Delivery success SLO burning slowly (8% of deliveries dead-lettered)"
+              description: "Sustained elevated failure rate; the error budget will be exhausted within days."
+              runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationDeliverySuccessSlowBurn.md"
+
+  - interval: 1m
+    name: DLQ volume per tenant
+    input_series:
+      - series: 'notifications_dlq_total{tenant="acme",channel="EMAIL"}'
+        values: '0+5x60'
+      - series: 'notifications_dlq_total{tenant="quiet",channel="EMAIL"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: NotificationDlqRateHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: dlq, tenant: acme, channel: EMAIL }
+            exp_annotations:
+              summary: "Tenant acme sent 75 EMAIL deliveries to the DLQ in 15m"
+              description: "Deliveries exhausted their retries. Check the provider, the recipients and the circuit breaker for the channel."
+              runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationDlqRateHigh.md"
+
+  - interval: 1m
+    name: p95 latency over 500ms
+    input_series:
+      # every request lands in the 1s bucket => p95 is ~0.96s
+      - series: 'http_server_requests_seconds_bucket{uri="/api/v1/notifications",le="0.1"}'
+        values: '0x60'
+      - series: 'http_server_requests_seconds_bucket{uri="/api/v1/notifications",le="0.5"}'
+        values: '0x60'
+      - series: 'http_server_requests_seconds_bucket{uri="/api/v1/notifications",le="1"}'
+        values: '0+60x60'
+      - series: 'http_server_requests_seconds_bucket{uri="/api/v1/notifications",le="+Inf"}'
+        values: '0+60x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: NotificationApiLatencyP95High
+        exp_alerts:
+          - exp_labels: { severity: warning, slo: latency }
+            exp_annotations:
+              summary: "API p95 latency is 975ms (SLO 500ms)"
+              description: "Ingest requests are slow: typically Redis, Kafka publish or database pressure."
+              runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationApiLatencyP95High.md"
+
+  - interval: 1m
+    name: fast API stays quiet
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{uri="/api/v1/notifications",le="0.1"}'
+        values: '0+60x60'
+      - series: 'http_server_requests_seconds_bucket{uri="/api/v1/notifications",le="+Inf"}'
+        values: '0+60x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: NotificationApiLatencyP95High
+        exp_alerts: []
+
+  - interval: 1m
+    name: ingest failing when 503s dominate
+    input_series:
+      - series: 'notifications_rejected_total{tenant="acme",reason="publish_failed"}'
+        values: '0+50x30'
+      - series: 'notifications_rejected_total{tenant="acme",reason="dependency_unavailable"}'
+        values: '0+50x30'
+      - series: 'notifications_accepted_total{tenant="acme",priority="NORMAL"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NotificationIngestFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: availability }
+            exp_annotations:
+              summary: "90.91% of ingest requests fail with 503 (Kafka or Redis unavailable)"
+              description: "The API fails closed when Kafka or Redis is unreachable; clients receive 503 and must retry."
+              runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationIngestFailing.md"
+
+  - interval: 1m
+    name: service down
+    input_series:
+      - series: 'up{job="notification-service",instance="app:8080"}'
+        values: '1x5 0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NotificationServiceDown
+        exp_alerts:
+          - exp_labels: { severity: critical, slo: availability, job: notification-service, instance: "app:8080" }
+            exp_annotations:
+              summary: "Scrape target app:8080 is down"
+              description: "Prometheus cannot scrape the service; it is down, restarting or unreachable."
+              runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationServiceDown.md"

@@ -69,6 +69,39 @@ jobs:
           name: chaos-reports
           path: target/failsafe-reports
 
+  observability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check rules
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring:/m:ro" prom/prometheus:v2.54.1 check rules /m/alerts/notification-slo.yml
+      - name: promtool test rules (alert unit tests)
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring:/m:ro" prom/prometheus:v2.54.1 test rules /m/tests/notification-slo.test.yml
+      - name: Compose config is valid
+        run: docker compose --profile monitoring config -q
+      - name: Boot the monitoring stack and check Grafana datasources
+        run: |
+          docker compose --profile monitoring up -d prometheus loki tempo alloy grafana
+          for i in $(seq 1 60); do curl -fs localhost:3000/api/health >/dev/null && break; sleep 2; done
+          for ds in prometheus loki tempo; do
+            for i in $(seq 1 40); do
+              out=$(curl -s "localhost:3000/api/datasources/uid/$ds/health" || true)
+              echo "$ds: $out"
+              echo "$out" | grep -q '"status":"OK"' && break
+              sleep 3
+            done
+            echo "$out" | grep -q '"status":"OK"'
+          done
+          curl -fs localhost:9090/api/v1/rules | grep -q NotificationDeliverySuccessFastBurn
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose --profile monitoring logs --no-color | tail -300
+      - name: Tear down
+        if: always()
+        run: docker compose --profile monitoring down -v
+
   e2e:
     runs-on: ubuntu-latest
     needs: unit

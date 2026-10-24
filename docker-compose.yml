@@ -52,7 +52,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       NOTIFICATION_SECURITY_ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
       TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-http://jaeger:4318/v1/traces}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q UP"]
       interval: 5s
@@ -63,7 +63,9 @@ services:
   prometheus:
     profiles: ["observability", "monitoring"]
     image: prom/prometheus:v2.54.1
-    volumes: ["./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts:/etc/prometheus/rules:ro
     extra_hosts: ["host.docker.internal:host-gateway"]
     ports: ["9090:9090"]
   grafana:
@@ -76,7 +78,31 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports: ["3000:3000"]
-    depends_on: [prometheus]
+    depends_on: [prometheus, loki, tempo]
+  loki:
+    profiles: ["observability", "monitoring"]
+    image: grafana/loki:3.1.1
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes: ["./observability/loki/loki.yml:/etc/loki/loki.yml:ro"]
+    ports: ["3100:3100"]
+  alloy:
+    # ships container logs (via the Docker socket) to Loki
+    profiles: ["observability", "monitoring"]
+    image: grafana/alloy:v1.3.1
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on: [loki]
+  tempo:
+    # OTLP trace backend. Point the app at it with OTEL_TRACES_ENDPOINT=http://tempo:4318/v1/traces
+    # (host-run app: http://localhost:4319/v1/traces)
+    profiles: ["observability", "monitoring"]
+    image: grafana/tempo:2.6.0
+    user: "0"
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes: ["./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro"]
+    ports: ["3200:3200", "4319:4318"]
   jaeger:
     profiles: ["observability", "monitoring", "app"]
     image: jaegertracing/all-in-one:1.60

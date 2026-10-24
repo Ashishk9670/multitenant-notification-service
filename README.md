@@ -48,6 +48,13 @@ flowchart TD
   `POST /api/v1/webhook/rotate-secret`. See [ADR 0002](docs/adr/0002-signed-ssrf-safe-webhooks.md).
 * **Dashboards**: `docker compose --profile monitoring up -d` provisions Grafana (http://localhost:3000) with an overview dashboard and a
   per-tenant dashboard (`Notification Service - Per Tenant`, pick a tenant from the variable).
+* **Logs and traces**: the same profile runs Loki (logs, shipped by Grafana Alloy from the Docker socket) and Tempo (traces); Grafana has
+  Prometheus, Loki, Tempo and Jaeger datasources, log lines link to traces by `traceId`. Send traces to Tempo with
+  `OTEL_TRACES_ENDPOINT=http://tempo:4318/v1/traces docker compose --profile app --profile monitoring up -d` (host-run app:
+  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4319/v1/traces`); Jaeger remains the default trace backend.
+* **Alerts / SLOs**: Prometheus rules in [`monitoring/alerts/`](monitoring/alerts/notification-slo.yml) (delivery success 99% with multi-window burn rate,
+  DLQ volume, API p95 < 500 ms, ingest failures, service down), unit-tested with `promtool` in CI (`monitoring/tests/`). Each alert has a runbook in
+  [`docs/runbooks/`](docs/runbooks/).
 
 Contracts: [`asyncapi.yaml`](asyncapi.yaml) (Kafka events) and OpenAPI at `/v3/api-docs` / `/swagger-ui.html`.
 
