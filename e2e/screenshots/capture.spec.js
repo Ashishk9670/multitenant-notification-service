@@ -14,12 +14,12 @@ test('capture admin UI screenshots', async ({ page, request }) => {
   const key = (await res.json()).apiKey;
   const h = { 'X-API-Key': key };
 
-  await request.post('/api/v1/templates', { headers: h, data: { name: 'welcome', channel: 'EMAIL', subject: 'Welcome {{name}}', body: 'Hi {{name}}, thanks for joining {{product|us}}!' } });
+  await request.post('/api/v1/templates', { headers: h, data: { name: 'welcome', channel: 'SMS', body: 'Hi {{name}}, thanks for joining {{product|us}}!' } });
   await request.post('/api/v1/templates', { headers: h, data: { name: 'otp', channel: 'SMS', body: 'Your code is {{code}}. It expires in 5 minutes.' } });
   const sends = [
-    { channels: ['EMAIL'], priority: 'HIGH', recipients: { email: 'ann@example.com' }, templateName: 'welcome', variables: { name: 'Ann' } },
+    { channels: ['SMS'], priority: 'HIGH', recipients: { phone: '+15557654321' }, templateName: 'welcome', variables: { name: 'Ann' } },
     { channels: ['SMS'], recipients: { phone: '+15551234567' }, templateName: 'otp', variables: { code: '482913' } },
-    { channels: ['EMAIL'], priority: 'LOW', recipients: { email: 'flaky@example.com' }, body: 'Fails twice, then succeeds' },
+    { channels: ['PUSH'], priority: 'LOW', recipients: { deviceToken: 'device-token-123' }, body: 'Your order has shipped' },
   ];
   for (const s of sends) {
     const r = await request.post('/api/v1/notifications', { headers: h, data: s });
@@ -29,6 +29,7 @@ test('capture admin UI screenshots', async ({ page, request }) => {
   await page.goto('/');
   await page.getByTestId('api-key').fill(key);
   await page.getByTestId('api-key').dispatchEvent('change');
+  await page.reload(); // key is kept in sessionStorage; reload clears the transient 401 from the first, key-less load
   await expect(page.getByTestId('auth-state')).toHaveText('authenticated');
   await expect(page.locator('#t-rows tr[data-name="welcome"]')).toBeVisible();
   await page.screenshot({ path: path.join(OUT, 'admin-ui-templates.png') });
@@ -44,7 +45,8 @@ test('capture admin UI screenshots', async ({ page, request }) => {
   await page.locator('#deliveries-section').screenshot({ path: path.join(OUT, 'admin-ui-deliveries.png') });
 
   // a send in progress (shows the form filled in)
-  await page.getByTestId('s-recipient').fill('new.user@example.com');
+  await page.getByTestId('s-channel').selectOption('SMS');
+  await page.getByTestId('s-recipient').fill('+15550001111');
   await page.getByTestId('s-template').fill('welcome');
   await page.getByTestId('s-vars').fill('{"name":"Sam"}');
   await page.locator('#send-section').scrollIntoViewIfNeeded();
