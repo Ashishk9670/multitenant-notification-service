@@ -85,7 +85,7 @@ jobs:
         run: |
           docker compose --profile monitoring up -d prometheus loki tempo alloy grafana
           for i in $(seq 1 60); do curl -fs localhost:3000/api/health >/dev/null && break; sleep 2; done
-          for ds in prometheus loki tempo; do
+          for ds in prometheus loki; do
             for i in $(seq 1 40); do
               out=$(curl -s "localhost:3000/api/datasources/uid/$ds/health" || true)
               echo "$ds: $out"
@@ -94,6 +94,22 @@ jobs:
             done
             echo "$out" | grep -q '"status":"OK"'
           done
+          # Grafana has no health endpoint for Tempo; query it through the Grafana datasource proxy instead
+          for i in $(seq 1 40); do
+            out=$(curl -s localhost:3000/api/datasources/proxy/uid/tempo/api/echo || true)
+            echo "tempo: $out"
+            echo "$out" | grep -q echo && break
+            sleep 3
+          done
+          echo "$out" | grep -q echo
+          # Alloy must be shipping container logs into Loki
+          for i in $(seq 1 40); do
+            out=$(curl -s localhost:3100/loki/api/v1/label/service/values || true)
+            echo "loki services: $out"
+            echo "$out" | grep -q '"loki"' && break
+            sleep 3
+          done
+          echo "$out" | grep -q '"loki"'
           curl -fs localhost:9090/api/v1/rules | grep -q NotificationDeliverySuccessFastBurn
       - name: Dump logs on failure
         if: failure()
