@@ -107,7 +107,7 @@
     <profile>
       <id>mutation</id>
       <properties>
-        <mutation.threshold>0</mutation.threshold>
+        <mutation.threshold>80</mutation.threshold>
       </properties>
       <build>
         <plugins>
