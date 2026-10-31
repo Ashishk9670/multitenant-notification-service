@@ -12,7 +12,7 @@ jobs:
       packages: write
       id-token: write   # keyless signing (Sigstore OIDC)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: sigstore/cosign-installer@v3
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: '21', cache: maven }
