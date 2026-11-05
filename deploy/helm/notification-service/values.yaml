@@ -1,0 +1,91 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/ashishk9670/multitenant-notification-service
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Non-secret configuration, rendered into a ConfigMap and injected as environment variables.
+config:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notifications
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  TRACING_SAMPLING_PROBABILITY: "0.1"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+extraConfig: {}      # merged over `config`
+
+# Secrets are NEVER stored in this chart. Point at a Secret that already exists in the namespace
+# (created by External Secrets Operator, Sealed Secrets, Vault, ...). See deploy/helm/examples/.
+# The Secret must contain: SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, NOTIFICATION_SECURITY_ADMIN_TOKEN
+existingSecret: notification-service
+
+# Only for local clusters / CI rendering. Creates a Secret from `secret.values`; never use with real credentials.
+secret:
+  create: false
+  values: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: notifications.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: /actuator/prometheus
+  prometheus.io/port: "8080"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+networkPolicy:
+  enabled: false     # when true: allow ingress to the HTTP port only; egress is left open (Kafka/Redis/Postgres/providers)
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

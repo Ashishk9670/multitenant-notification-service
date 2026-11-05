@@ -6,7 +6,7 @@ info:
     Kafka event contract. REST ingestion is documented separately via OpenAPI (/v3/api-docs, /swagger-ui.html).
     Flow: REST -> priority topic (NotificationEvent) -> router fan-out -> channel topic (DeliveryEvent)
     -> on failure retry topic N (with x-not-before header) -> channel topic again -> after max retries DLQ.
-    Messages are JSON; Spring type headers (__TypeId__) are added by the producer.
+    Messages are JSON; Instants are numeric epoch seconds; Spring type headers (__TypeId__) are added by the producer.
 defaultContentType: application/json
 servers:
   local:
@@ -159,7 +159,7 @@ components:
           description: Rendered content per channel (keys are Channel values).
           additionalProperties: { $ref: '#/components/schemas/Content' }
         recipients: { $ref: '#/components/schemas/Recipients' }
-        createdAt: { type: string, format: date-time }
+        createdAt: { type: number, description: 'Epoch seconds with fractional nanoseconds (Jackson default for java.time.Instant as written by the Kafka JsonSerializer), e.g. 1792855031.901003' }
     DeliveryEvent:
       type: object
       required: [id, tenantId, channel, priority, recipient, body, attempt, createdAt]
@@ -172,5 +172,5 @@ components:
         subject: { type: [string, 'null'] }
         body: { type: string }
         attempt: { type: integer, minimum: 0, description: Number of failed attempts so far }
-        createdAt: { type: string, format: date-time }
+        createdAt: { type: number, description: 'Epoch seconds with fractional nanoseconds (Jackson default for java.time.Instant as written by the Kafka JsonSerializer), e.g. 1792855031.901003' }
         lastError: { type: [string, 'null'] }

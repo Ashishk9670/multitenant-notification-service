@@ -1,0 +1,35 @@
+# Argo CD Application: deploys the Helm chart from this repository and keeps the cluster in sync.
+# Prerequisite: the Secret `notification-service` exists in the target namespace (see deploy/helm/examples/).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: notification-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Ashishk9670/multitenant-notification-service.git
+    targetRevision: main
+    path: deploy/helm/notification-service
+    helm:
+      releaseName: notification
+      valueFiles:
+        - ../examples/values-prod.example.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: notification
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

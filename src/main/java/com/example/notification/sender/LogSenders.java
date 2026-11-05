@@ -4,6 +4,7 @@ import com.example.notification.model.Channel;
 import com.example.notification.model.DeliveryEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /** Stub providers that only log. A recipient containing "fail" always fails; "flaky" fails the first 2 attempts. */
@@ -24,16 +25,19 @@ public final class LogSenders {
     }
 
     @Component
+    @ConditionalOnProperty(name = "notification.provider.email.type", havingValue = "stub", matchIfMissing = true)
     public static class Email extends Base {
         public Channel channel() { return Channel.EMAIL; }
     }
 
     @Component
+    @ConditionalOnProperty(name = "notification.provider.sms.type", havingValue = "stub", matchIfMissing = true)
     public static class Sms extends Base {
         public Channel channel() { return Channel.SMS; }
     }
 
     @Component
+    @ConditionalOnProperty(name = "notification.provider.push.type", havingValue = "stub", matchIfMissing = true)
     public static class Push extends Base {
         public Channel channel() { return Channel.PUSH; }
     }

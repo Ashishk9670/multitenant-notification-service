@@ -1,0 +1,35 @@
+{
+  "consumer": "tenant-webhook-receiver",
+  "provider": "multitenant-notification-service",
+  "description": "Expectations a tenant's webhook receiver relies on. If the provider breaks any of these, receivers break.",
+  "request": {
+    "method": "POST",
+    "contentType": "application/json",
+    "headers": {
+      "X-Webhook-Id": "^[^:]+:(EMAIL|SMS|PUSH)$",
+      "X-Webhook-Timestamp": "^[0-9]{10,}$",
+      "X-Webhook-Signature": "^sha256=[0-9a-f]{64}$"
+    },
+    "signature": {
+      "algorithm": "HmacSHA256",
+      "signedString": "{X-Webhook-Timestamp}.{rawBody}",
+      "format": "sha256=<lowercase hex>",
+      "maxClockSkewSeconds": 300
+    },
+    "bodySchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["notificationId", "tenantId", "channel", "status", "attempts", "error", "timestamp"],
+      "properties": {
+        "notificationId": { "type": "string", "minLength": 1 },
+        "tenantId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "channel": { "enum": ["EMAIL", "SMS", "PUSH"] },
+        "status": { "enum": ["SENT", "DEAD"] },
+        "attempts": { "type": "integer", "minimum": 0 },
+        "error": { "type": ["string", "null"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

@@ -3,11 +3,13 @@ package com.example.notification.messaging;
 import com.example.notification.config.NotificationProperties;
 import com.example.notification.model.Channel;
 import com.example.notification.model.DeliveryEvent;
+import com.example.notification.sender.ChannelCircuitBreakers;
 import com.example.notification.sender.NotificationSender;
 import com.example.notification.service.Backoff;
 import com.example.notification.service.DeliveryLogService;
 import com.example.notification.service.DeliveryStatus;
 import com.example.notification.service.NotificationMetrics;
+import com.example.notification.webhook.WebhookDispatcher;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.EnumMap;
@@ -34,16 +36,21 @@ public class ChannelConsumers {
     private final Backoff backoff;
     private final DeliveryLogService deliveryLog;
     private final NotificationMetrics metrics;
+    private final ChannelCircuitBreakers breakers;
+    private final WebhookDispatcher receipts;
 
     public ChannelConsumers(List<NotificationSender> senderList, KafkaTemplate<String, Object> kafka,
                             NotificationProperties props, Backoff backoff, DeliveryLogService deliveryLog,
-                            NotificationMetrics metrics) {
+                            NotificationMetrics metrics,
+                            ChannelCircuitBreakers breakers, WebhookDispatcher receipts) {
         senderList.forEach(s -> senders.put(s.channel(), s));
         this.kafka = kafka;
         this.props = props;
         this.backoff = backoff;
         this.deliveryLog = deliveryLog;
         this.metrics = metrics;
+        this.breakers = breakers;
+        this.receipts = receipts;
     }
 
     @KafkaListener(topics = "${notification.topics.email}", groupId = "channel-email", concurrency = "3")
@@ -70,9 +77,10 @@ public class ChannelConsumers {
 
     void deliver(DeliveryEvent e) {
         try {
-            senders.get(e.channel()).send(e);
+            breakers.send(senders.get(e.channel()), e);
             deliveryLog.record(e, DeliveryStatus.SENT, null);
             metrics.sent(e.tenantId(), e.channel());
+            receipts.publish(e, DeliveryStatus.SENT, null);
         } catch (Exception ex) {
             handleFailure(e, ex);
         }
@@ -88,6 +96,7 @@ public class ChannelConsumers {
             deliveryLog.record(failed, DeliveryStatus.DEAD, err);
             metrics.deadLettered(e.tenantId(), e.channel());
             kafka.send(props.topics().dlq(), e.tenantId() + ":" + e.id(), failed);
+            receipts.publish(failed, DeliveryStatus.DEAD, err);
             return;
         }
         Duration delay = backoff.delayFor(next);

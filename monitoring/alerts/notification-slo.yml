@@ -1,0 +1,92 @@
+# SLOs (30d window):
+#   * delivery success rate  >= 99%   (terminal outcomes: SENT vs dead-lettered)
+#   * API latency            p95 < 500 ms for /api/** requests
+#   * dead-letter volume     bounded per tenant
+# Every alert links to docs/runbooks/<alert>.md. Validated in CI with promtool (check rules + test rules).
+groups:
+  - name: notification-slo-recording
+    interval: 30s
+    rules:
+      # share of terminal deliveries that ended in the DLQ (NaN when there is no traffic, so alerts stay quiet)
+      - record: notification:delivery_error_ratio:rate5m
+        expr: sum(rate(notifications_dlq_total[5m])) / (sum(rate(notifications_sent_total[5m])) + sum(rate(notifications_dlq_total[5m])))
+      - record: notification:delivery_error_ratio:rate30m
+        expr: sum(rate(notifications_dlq_total[30m])) / (sum(rate(notifications_sent_total[30m])) + sum(rate(notifications_dlq_total[30m])))
+      - record: notification:delivery_error_ratio:rate1h
+        expr: sum(rate(notifications_dlq_total[1h])) / (sum(rate(notifications_sent_total[1h])) + sum(rate(notifications_dlq_total[1h])))
+      - record: notification:delivery_error_ratio:rate6h
+        expr: sum(rate(notifications_dlq_total[6h])) / (sum(rate(notifications_sent_total[6h])) + sum(rate(notifications_dlq_total[6h])))
+      - record: notification:api_latency_p95_seconds:rate5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri=~"/api/.*"}[5m])))
+
+  - name: notification-slo-alerts
+    rules:
+      # Multi-window burn rate for the 99% delivery SLO (error budget 1%).
+      - alert: NotificationDeliverySuccessFastBurn
+        expr: notification:delivery_error_ratio:rate5m > (14.4 * 0.01) and notification:delivery_error_ratio:rate1h > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: critical
+          slo: delivery-success
+        annotations:
+          summary: "Delivery success SLO burning fast ({{ $value | humanizePercentage }} of deliveries dead-lettered)"
+          description: "At this rate the 30-day error budget is gone in about two days."
+          runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationDeliverySuccessFastBurn.md"
+      - alert: NotificationDeliverySuccessSlowBurn
+        expr: notification:delivery_error_ratio:rate30m > (6 * 0.01) and notification:delivery_error_ratio:rate6h > (6 * 0.01)
+        for: 15m
+        labels:
+          severity: warning
+          slo: delivery-success
+        annotations:
+          summary: "Delivery success SLO burning slowly ({{ $value | humanizePercentage }} of deliveries dead-lettered)"
+          description: "Sustained elevated failure rate; the error budget will be exhausted within days."
+          runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationDeliverySuccessSlowBurn.md"
+
+      - alert: NotificationDlqRateHigh
+        expr: sum by (tenant, channel) (increase(notifications_dlq_total[15m])) > 20
+        for: 5m
+        labels:
+          severity: warning
+          slo: dlq
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} sent {{ $value | humanize }} {{ $labels.channel }} deliveries to the DLQ in 15m"
+          description: "Deliveries exhausted their retries. Check the provider, the recipients and the circuit breaker for the channel."
+          runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationDlqRateHigh.md"
+
+      - alert: NotificationApiLatencyP95High
+        expr: notification:api_latency_p95_seconds:rate5m > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          slo: latency
+        annotations:
+          summary: "API p95 latency is {{ $value | humanizeDuration }} (SLO 500ms)"
+          description: "Ingest requests are slow: typically Redis, Kafka publish or database pressure."
+          runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationApiLatencyP95High.md"
+
+      - alert: NotificationIngestFailing
+        expr: |
+          sum(rate(notifications_rejected_total{reason=~"publish_failed|dependency_unavailable"}[5m]))
+            /
+          (sum(rate(notifications_rejected_total{reason=~"publish_failed|dependency_unavailable"}[5m])) + sum(rate(notifications_accepted_total[5m])))
+            > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of ingest requests fail with 503 (Kafka or Redis unavailable)"
+          description: "The API fails closed when Kafka or Redis is unreachable; clients receive 503 and must retry."
+          runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationIngestFailing.md"
+
+      - alert: NotificationServiceDown
+        expr: up{job="notification-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "Scrape target {{ $labels.instance }} is down"
+          description: "Prometheus cannot scrape the service; it is down, restarting or unreachable."
+          runbook_url: "https://github.com/Ashishk9670/multitenant-notification-service/blob/main/docs/runbooks/NotificationServiceDown.md"

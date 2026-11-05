@@ -1,0 +1,23 @@
+# Example overrides for a production-like install:
+#   helm upgrade --install notification deploy/helm/notification-service -n notification --create-namespace \
+#     -f deploy/helm/examples/values-prod.example.yaml
+image:
+  tag: "0.1.0"
+config:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://pg-primary.db.svc:5432/notifications
+  SPRING_DATA_REDIS_HOST: redis-master.cache.svc
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-0.kafka.svc:9092,kafka-1.kafka.svc:9092
+existingSecret: notification-service   # created by ExternalSecret / SealedSecret, see this folder
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: notifications.example.com
+      paths: [{ path: /, pathType: Prefix }]
+  tls:
+    - secretName: notifications-tls
+      hosts: [notifications.example.com]
+networkPolicy:
+  enabled: true

@@ -73,6 +73,15 @@ class NotificationServiceTest {
     }
 
     @Test
+    void idempotencyStoreOutageIsServiceUnavailableNotServerError() {
+        when(idem.reserve(any(), any(), any())).thenThrow(new IllegalStateException("redis down"));
+        assertThatThrownBy(() -> service.submit("acme", "k1", raw(Priority.NORMAL)))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("status", HttpStatus.SERVICE_UNAVAILABLE);
+        verifyNoInteractions(kafka, limiter, quota);
+    }
+
+    @Test
     void duplicateIdempotencyKeyShortCircuits() {
         when(idem.reserve(eq("acme"), eq("k1"), any())).thenReturn(Optional.of("existing-id"));
         NotificationAccepted res = service.submit("acme", "k1", raw(Priority.NORMAL));
