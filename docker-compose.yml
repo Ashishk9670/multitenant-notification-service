@@ -8,7 +8,7 @@ services:
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U notif -d notifications"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U notif -d notifications"]
       interval: 5s
       retries: 10
   redis:
@@ -39,6 +39,7 @@ services:
   # Containerised application: `docker compose --profile app up -d --build --wait`
   app:
     profiles: ["app"]
+    restart: on-failure   # safety net: never leave the stack dead if a dependency is briefly unavailable
     build: .
     image: multitenant-notification-service:local
     depends_on:
