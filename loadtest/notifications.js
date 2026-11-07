@@ -2,6 +2,9 @@
 // Run: k6 run -e BASE_URL=http://localhost:8080 -e ADMIN_TOKEN=dev-admin-token loadtest/notifications.js
 import http from 'k6/http';
 import { check } from 'k6';
+import { Rate } from 'k6/metrics';
+
+const throttled = new Rate('throttled');
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const ADMIN_TOKEN = __ENV.ADMIN_TOKEN || 'dev-admin-token';
@@ -18,7 +21,10 @@ export const options = {
     },
   },
   thresholds: {
-    http_req_failed: ['rate<0.01'],
+    // 429 (per-tenant rate limit, default 10 req/s sustained) is a designed, fast response, not a failure
+    'http_req_failed{expected_response:true}': ['rate<0.01'],
+    // only meaningful below the tenant limit: above it most requests are throttled
+    throttled: ['rate<1'],
     http_req_duration: ['p(95)<500'],
   },
 };
@@ -42,7 +48,9 @@ export default function (data) {
       recipients: { email: 'load@example.com' },
       body: `load ${__VU}-${__ITER}`,
     }),
-    { headers: { 'Content-Type': 'application/json', 'X-API-Key': data.key } },
+    { headers: { 'Content-Type': 'application/json', 'X-API-Key': data.key },
+      responseCallback: http.expectedStatuses(202, 429) },
   );
-  check(res, { accepted: (r) => r.status === 200 || r.status === 201 || r.status === 202 });
+  throttled.add(res.status === 429);
+  check(res, { 'accepted or throttled': (r) => r.status === 202 || r.status === 429 });
 }
