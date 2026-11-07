@@ -42,7 +42,7 @@ flowchart TD
 * **Stub providers (default)**: log-only senders. A recipient containing `fail` always fails; `flaky` fails twice then succeeds.
 * **Real providers (opt-in)**: `EMAIL_PROVIDER=smtp|ses`, `SMS_PROVIDER=twilio`, `PUSH_PROVIDER=fcm` plus credentials from env
   (see `notification.provider.*` in `application.yml`). Channels not switched stay on stubs. See [ADR 0003](docs/adr/0003-provider-adapters-behind-config-flags.md).
-* **Circuit breakers**: one Resilience4j breaker per channel; state exported as `resilience4j_circuitbreaker_*`. See [ADR 0001](docs/adr/0001-circuit-breaker-per-channel.md).
+* **Circuit breakers**: one Resilience4j breaker per channel; only provider faults count (5xx, transport, 429, 401/403), never a tenant's invalid recipients; state exported as `resilience4j_circuitbreaker_*`. See [ADR 0001](docs/adr/0001-circuit-breaker-per-channel.md).
 * **Delivery-receipt webhooks**: `PUT /api/v1/webhook {"url":"https://..."}` (https only, private/loopback/metadata addresses blocked),
   signed with HMAC-SHA256 (`X-Webhook-Signature`, `X-Webhook-Timestamp`), retried with backoff. `GET`/`DELETE` `/api/v1/webhook`,
   `POST /api/v1/webhook/rotate-secret`. See [ADR 0002](docs/adr/0002-signed-ssrf-safe-webhooks.md).

@@ -14,4 +14,13 @@ public class ProviderException extends RuntimeException {
 
     /** 5xx, 429 and transport errors are worth retrying; other 4xx are permanent. */
     public boolean isRetryable() { return status < 0 || status == 429 || status >= 500; }
+
+    /**
+     * Whether this failure says something about the provider's health (transport errors, 5xx, throttling, timeouts,
+     * rejected credentials) rather than about one recipient or request (400, 404, 410, 422 ...). Only provider faults
+     * count against the circuit breaker, so one tenant's bad recipients cannot take a channel down for everyone.
+     */
+    public boolean isProviderFault() {
+        return status < 0 || status >= 500 || status == 429 || status == 408 || status == 401 || status == 403;
+    }
 }

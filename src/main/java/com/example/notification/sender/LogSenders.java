@@ -7,7 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-/** Stub providers that only log. A recipient containing "fail" always fails; "flaky" fails the first 2 attempts. */
+/**
+ * Stub providers that only log. A recipient containing "fail" is always rejected as a bad recipient (it never counts against
+ * the circuit breaker); "flaky" simulates a transient provider failure on the first 2 attempts (it does count).
+ */
 public final class LogSenders {
     private LogSenders() { }
 
@@ -17,8 +20,11 @@ public final class LogSenders {
         @Override
         public void send(DeliveryEvent e) {
             String r = e.recipient();
-            if (r.contains("fail") || (r.contains("flaky") && e.attempt() < 2)) {
-                throw new IllegalStateException("Stub provider rejected delivery to " + channel());
+            if (r.contains("fail")) {
+                throw new RecipientRejectedException("Stub provider rejected delivery to " + channel());
+            }
+            if (r.contains("flaky") && e.attempt() < 2) {
+                throw new IllegalStateException("Stub provider failed delivery to " + channel());
             }
             log.info("[{}] tenant={} id={} to={} subject={} body={}", channel(), e.tenantId(), e.id(), r, e.subject(), e.body());
         }
