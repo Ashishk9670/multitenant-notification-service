@@ -18,11 +18,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: '21', cache: maven }
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with: { languages: java-kotlin, build-mode: manual }
       - name: Build
         run: mvn -B -ntp -DskipTests package
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:java
           # Code scanning upload needs GitHub Advanced Security on private repos; keep SARIF as an artifact.
