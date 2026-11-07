@@ -3,70 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Notification Admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b82f6'/%3E%3Cpath d='M16 7a6 6 0 00-6 6v4l-2 3h16l-2-3v-4a6 6 0 00-6-6zm-2 15a2 2 0 004 0z' fill='white'/%3E%3C/svg%3E">
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #1c2430; }
-  header { background: #1c2430; color: #fff; padding: 12px 24px; display: flex; gap: 16px; align-items: center; }
-  header input { padding: 6px 8px; border-radius: 4px; border: 0; }
-  main { max-width: 1000px; margin: 20px auto; padding: 0 16px; display: grid; gap: 20px; }
-  section { background: #fff; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-  h2 { margin-top: 0; font-size: 18px; }
-  label { display: block; margin: 8px 0 2px; font-size: 13px; color: #556; }
-  input, select, textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ccd; border-radius: 4px; font: inherit; }
-  button { margin-top: 10px; padding: 7px 14px; border: 0; border-radius: 4px; background: #2f6fed; color: #fff; cursor: pointer; }
-  button.danger { background: #c0392b; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
-  .msg { margin-top: 8px; font-size: 14px; min-height: 18px; }
-  .err { color: #c0392b; } .ok { color: #1e8449; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  :root {
+    --bg: #f4f6fb; --surface: #ffffff; --surface-2: #f7f9fd; --border: #e3e8f2; --text: #0f1b33; --muted: #5f6f8d;
+    --accent: #2563eb; --accent-strong: #1d4ed8; --accent-soft: #e6eefe;
+    --ok: #047857; --ok-soft: #d1fae5; --warn: #b45309; --warn-soft: #fef3c7; --danger: #b91c1c; --danger-soft: #fee2e2; --info: #1d4ed8; --info-soft: #dbeafe;
+    --nav: #0f1b33; --nav-text: #e8eefc;
+    --shadow: 0 1px 2px rgba(15,27,51,.06), 0 8px 24px rgba(15,27,51,.06); --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a1020; --surface: #111a30; --surface-2: #16213b; --border: #24324f; --text: #e8eefc; --muted: #8fa0c4;
+      --accent: #5b8def; --accent-strong: #7aa2f7; --accent-soft: #14264d;
+      --ok: #34d399; --ok-soft: #0e3a2c; --warn: #fbbf24; --warn-soft: #3a2c0a; --danger: #f87171; --danger-soft: #3d1717; --info: #7aa2f7; --info-soft: #14264d;
+      --nav: #070c19; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif; }
+  :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 8px; }
+
+  header { position: sticky; top: 0; z-index: 10; background: var(--nav); color: var(--nav-text); border-bottom: 1px solid rgba(255,255,255,.07);
+           display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px clamp(16px, 4vw, 32px); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .brand svg { width: 30px; height: 30px; }
+  .brand small { font-weight: 500; opacity: .6; margin-left: 4px; font-size: 12.5px; }
+  .keybox { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .keybox label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; opacity: .85; font-weight: 600; }
+  .keybox input { width: 270px; max-width: 100%; background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.18); }
+  .keybox input::placeholder { color: rgba(255,255,255,.45); }
+  #auth-state { font-size: 12.5px; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.1); }
+  #auth-state:empty { display: none; }
+  #auth-state.ok { background: rgba(52,211,153,.18); color: #6ee7b7; }
+  #auth-state.bad { background: rgba(248,113,113,.2); color: #fca5a5; }
+
+  main { max-width: 1240px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 32px) 56px; display: grid; gap: 20px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .stat .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+  .stat .v { font-size: 28px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .stat.sent .v { color: var(--ok); } .stat.dead .v { color: var(--danger); } .stat.pending .v { color: var(--warn); }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 960px) { .cols { grid-template-columns: 1fr; } }
+  section.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px; }
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .card h2 { margin: 0; font-size: 16px; letter-spacing: -.005em; }
+  .card-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+  .field { display: grid; gap: 5px; margin-bottom: 12px; }
+  .field > label { font-size: 12px; color: var(--muted); font-weight: 650; }
+  input, select, textarea { font: inherit; color: var(--text); width: 100%; padding: 9px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+  textarea { resize: vertical; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
+  button { font: inherit; font-weight: 650; font-size: 14px; cursor: pointer; padding: 9px 18px; border-radius: 10px; border: 1px solid transparent;
+           background: var(--accent); color: #fff; transition: background .15s, transform .05s; }
+  button:hover { background: var(--accent-strong); }
+  button:active { transform: translateY(1px); }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  button.ghost:hover { background: var(--surface-2); }
+  button.danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); padding: 4px 12px; font-size: 12.5px; }
+  button.danger:hover { background: var(--danger-soft); }
+  button[disabled] { opacity: .6; cursor: progress; }
+  .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  .msg { font-size: 13.5px; font-weight: 600; min-height: 20px; }
+  .msg.ok { color: var(--ok); } .msg.err { color: var(--danger); }
+
+  .tablewrap { overflow-x: auto; margin: 0 -22px; padding: 0 22px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 10px; border-top: 1px solid var(--border); font-size: 13.5px; vertical-align: middle; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; border-top: 0; }
+  td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.err { color: var(--danger); font-size: 12.5px; max-width: 240px; }
+  .empty { color: var(--muted); text-align: center; padding: 26px 8px; border-top: 1px solid var(--border); font-size: 13.5px; }
+
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; letter-spacing: .04em; }
+  td[data-status="SENT"] { color: var(--ok); } td[data-status="DEAD"] { color: var(--danger); }
+  td[data-status="PENDING"], td[data-status="RETRYING"] { color: var(--warn); }
+  td[data-status] { font-weight: 800; font-size: 12px; letter-spacing: .04em; }
+  td[data-status]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 8px; }
+  .ch { display: inline-block; padding: 1px 9px; border-radius: 6px; background: var(--info-soft); color: var(--info); font-size: 11.5px; font-weight: 700; }
+  .live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 2s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (max-width: 700px) {
+    header { position: static; }
+    .keybox { margin-left: 0; width: 100%; } .keybox label { flex: 1; } .keybox input { width: 100%; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    section.card { padding: 16px; } .tablewrap { margin: 0 -16px; padding: 0 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
 <header>
-  <strong>Notification Admin</strong>
-  <label style="margin:0;color:#fff">API key
-    <input id="api-key" data-testid="api-key" type="password" autocomplete="off" placeholder="ntf_..." style="width:260px">
-  </label>
-  <span id="auth-state" data-testid="auth-state" style="font-size:13px"></span>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#3b82f6"/><path d="M16 7a6 6 0 00-6 6v4l-2 3h16l-2-3v-4a6 6 0 00-6-6zm-2 15a2 2 0 004 0z" fill="#fff"/></svg>
+    <span>Notification Admin<small>multi-tenant</small></span>
+  </div>
+  <div class="keybox">
+    <label>API key
+      <input id="api-key" data-testid="api-key" type="password" autocomplete="off" placeholder="ntf_...">
+    </label>
+    <span id="auth-state" data-testid="auth-state"></span>
+  </div>
 </header>
 <main>
-  <section id="templates-section">
-    <h2>Templates</h2>
-    <div class="row">
-      <div><label for="t-name">Name</label><input id="t-name" data-testid="t-name"></div>
-      <div><label for="t-channel">Channel</label>
-        <select id="t-channel" data-testid="t-channel"><option>EMAIL</option><option>SMS</option><option>PUSH</option></select></div>
-    </div>
-    <label for="t-subject">Subject</label><input id="t-subject" data-testid="t-subject">
-    <label for="t-body">Body (use {{variable}} or {{variable|default}})</label><textarea id="t-body" data-testid="t-body" rows="3"></textarea>
-    <button id="t-save" data-testid="t-save">Create template</button>
-    <div id="t-msg" class="msg" data-testid="t-msg"></div>
-    <table><thead><tr><th>Name</th><th>Channel</th><th>Subject</th><th></th></tr></thead>
-      <tbody id="t-rows" data-testid="t-rows"></tbody></table>
-  </section>
+  <div class="stats" aria-label="Delivery summary">
+    <div class="stat"><div class="k">Deliveries</div><div class="v" id="st-total">0</div></div>
+    <div class="stat sent"><div class="k">Sent</div><div class="v" id="st-sent">0</div></div>
+    <div class="stat pending"><div class="k">In flight</div><div class="v" id="st-pending">0</div></div>
+    <div class="stat dead"><div class="k">Dead-lettered</div><div class="v" id="st-dead">0</div></div>
+  </div>
 
-  <section id="send-section">
-    <h2>Send notification</h2>
-    <div class="row">
-      <div><label for="s-channel">Channel</label>
-        <select id="s-channel" data-testid="s-channel"><option>EMAIL</option><option>SMS</option><option>PUSH</option></select></div>
-      <div><label for="s-priority">Priority</label>
-        <select id="s-priority" data-testid="s-priority"><option>NORMAL</option><option>HIGH</option><option>LOW</option></select></div>
-    </div>
-    <label for="s-recipient">Recipient (email / phone / device token)</label><input id="s-recipient" data-testid="s-recipient">
-    <label for="s-template">Template name (optional)</label><input id="s-template" data-testid="s-template">
-    <label for="s-vars">Variables (JSON)</label><input id="s-vars" data-testid="s-vars" value="{}">
-    <label for="s-body">Body (when no template)</label><textarea id="s-body" data-testid="s-body" rows="2"></textarea>
-    <label for="s-idem">Idempotency-Key (optional)</label><input id="s-idem" data-testid="s-idem">
-    <button id="s-send" data-testid="s-send">Send</button>
-    <div id="s-msg" class="msg" data-testid="s-msg"></div>
-  </section>
+  <div class="cols">
+    <section id="send-section" class="card">
+      <div class="card-head"><div><h2>Send notification</h2><p>Queue a message for this tenant. Use a template or write the body inline.</p></div></div>
+      <div class="grid2">
+        <div class="field"><label for="s-channel">Channel</label>
+          <select id="s-channel" data-testid="s-channel"><option>EMAIL</option><option>SMS</option><option>PUSH</option></select></div>
+        <div class="field"><label for="s-priority">Priority</label>
+          <select id="s-priority" data-testid="s-priority"><option>NORMAL</option><option>HIGH</option><option>LOW</option></select></div>
+      </div>
+      <div class="field"><label for="s-recipient">Recipient (email / phone / device token)</label><input id="s-recipient" data-testid="s-recipient" placeholder="ann@example.com"></div>
+      <div class="grid2">
+        <div class="field"><label for="s-template">Template name (optional)</label><input id="s-template" data-testid="s-template" placeholder="welcome"></div>
+        <div class="field"><label for="s-idem">Idempotency-Key (optional)</label><input id="s-idem" data-testid="s-idem" placeholder="order-1042"></div>
+      </div>
+      <div class="field"><label for="s-vars">Variables (JSON)</label><input id="s-vars" data-testid="s-vars" value="{}"></div>
+      <div class="field"><label for="s-body">Body (when no template)</label><textarea id="s-body" data-testid="s-body" rows="3" placeholder="Your message"></textarea></div>
+      <div class="actions"><button id="s-send" data-testid="s-send">Send</button><div id="s-msg" class="msg" data-testid="s-msg"></div></div>
+    </section>
 
-  <section id="deliveries-section">
-    <h2>Delivery status <button id="d-refresh" data-testid="d-refresh" style="margin:0 0 0 12px">Refresh</button></h2>
-    <table><thead><tr><th>Notification</th><th>Channel</th><th>Status</th><th>Attempts</th><th>Error</th></tr></thead>
-      <tbody id="d-rows" data-testid="d-rows"></tbody></table>
+    <section id="templates-section" class="card">
+      <div class="card-head"><div><h2>Templates</h2><p>Reusable messages with <code>{{variable}}</code> or <code>{{variable|default}}</code>.</p></div></div>
+      <div class="grid2">
+        <div class="field"><label for="t-name">Name</label><input id="t-name" data-testid="t-name" placeholder="welcome"></div>
+        <div class="field"><label for="t-channel">Channel</label>
+          <select id="t-channel" data-testid="t-channel"><option>EMAIL</option><option>SMS</option><option>PUSH</option></select></div>
+      </div>
+      <div class="field"><label for="t-subject">Subject</label><input id="t-subject" data-testid="t-subject" placeholder="Welcome {{name}}"></div>
+      <div class="field"><label for="t-body">Body (use {{variable}} or {{variable|default}})</label><textarea id="t-body" data-testid="t-body" rows="3" placeholder="Hi {{name}}, thanks for joining {{product|us}}!"></textarea></div>
+      <div class="actions"><button id="t-save" data-testid="t-save">Create template</button><div id="t-msg" class="msg" data-testid="t-msg"></div></div>
+      <div class="tablewrap" style="margin-top:14px">
+        <table><thead><tr><th>Name</th><th>Channel</th><th>Subject</th><th></th></tr></thead>
+          <tbody id="t-rows" data-testid="t-rows"></tbody></table>
+        <div id="t-empty" class="empty" hidden>No templates yet.</div>
+      </div>
+    </section>
+  </div>
+
+  <section id="deliveries-section" class="card">
+    <div class="card-head">
+      <div><h2>Delivery status</h2><p>Latest 50 deliveries, refreshed every few seconds. <span class="live">live</span></p></div>
+      <button id="d-refresh" class="ghost" data-testid="d-refresh">Refresh</button>
+    </div>
+    <div class="tablewrap">
+      <table><thead><tr><th>Notification</th><th>Channel</th><th>Status</th><th>Attempts</th><th>Error</th></tr></thead>
+        <tbody id="d-rows" data-testid="d-rows"></tbody></table>
+      <div id="d-empty" class="empty" hidden>No deliveries yet. Send a notification to see it here.</div>
+    </div>
   </section>
 </main>
 <script>
@@ -75,39 +179,49 @@ const $ = id => document.getElementById(id);
 const apiKey = () => $('api-key').value.trim();
 const hdr = extra => Object.assign({ 'Content-Type': 'application/json', 'X-API-Key': apiKey() }, extra || {});
 try { $('api-key').value = sessionStorage.getItem('apiKey') || ''; } catch (e) { /* storage unavailable */ }
-let editingId = null;
 
+let loadError = false; // true while #t-msg shows an error produced by the template list request itself
 function show(el, text, ok) { el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); }
 async function err(res) { try { const j = await res.json(); return j.detail || res.statusText; } catch (e) { return res.statusText; } }
 function cell(tr, text) { const td = document.createElement('td'); td.textContent = text == null ? '' : text; tr.appendChild(td); return td; }
+async function busy(btn, work) {
+  btn.disabled = true;
+  try { return await work(); } finally { btn.disabled = false; }
+}
+function authState(text, cls) { const a = $('auth-state'); a.textContent = text; a.className = cls || ''; }
 
 async function loadTemplates() {
   const res = await fetch('/api/v1/templates', { headers: hdr() });
   const body = $('t-rows'); body.innerHTML = '';
-  $('auth-state').textContent = res.ok ? 'authenticated' : (res.status === 401 ? 'enter a valid API key' : '');
-  if (!res.ok) { show($('t-msg'), res.status + ' ' + await err(res), false); return; }
-  for (const t of await res.json()) {
+  if (res.ok) authState('authenticated', 'ok'); else if (res.status === 401) authState('enter a valid API key', 'bad'); else authState('');
+  if (!res.ok) { $('t-empty').hidden = true; loadError = true; show($('t-msg'), res.status + ' ' + await err(res), false); return; }
+  if (loadError) { loadError = false; show($('t-msg'), '', true); }
+  const list = await res.json();
+  $('t-empty').hidden = list.length > 0;
+  for (const t of list) {
     const tr = document.createElement('tr');
     tr.dataset.name = t.name;
-    cell(tr, t.name); cell(tr, t.channel); cell(tr, t.subject);
+    cell(tr, t.name).style.fontWeight = '650';
+    const ch = cell(tr, ''); const chip = document.createElement('span'); chip.className = 'ch'; chip.textContent = t.channel; ch.appendChild(chip);
+    cell(tr, t.subject);
     const td = cell(tr, '');
     const del = document.createElement('button'); del.textContent = 'Delete'; del.className = 'danger'; del.dataset.testid = 'delete-' + t.name;
     del.onclick = async () => { await fetch('/api/v1/templates/' + t.id, { method: 'DELETE', headers: hdr() }); loadTemplates(); };
-    td.appendChild(del);
+    td.appendChild(del); td.style.textAlign = 'right';
     body.appendChild(tr);
   }
 }
 
-$('t-save').onclick = async () => {
+$('t-save').onclick = (e) => busy(e.currentTarget, async () => {
   const payload = { name: $('t-name').value, channel: $('t-channel').value, subject: $('t-subject').value, body: $('t-body').value };
   const res = await fetch('/api/v1/templates', { method: 'POST', headers: hdr(), body: JSON.stringify(payload) });
   if (res.ok) { show($('t-msg'), 'Template created', true); loadTemplates(); }
   else show($('t-msg'), await err(res), false);
-};
+});
 
-$('s-send').onclick = async () => {
+$('s-send').onclick = (e) => busy(e.currentTarget, async () => {
   const ch = $('s-channel').value, rcp = $('s-recipient').value;
-  let vars; try { vars = JSON.parse($('s-vars').value || '{}'); } catch (e) { show($('s-msg'), 'Variables must be valid JSON', false); return; }
+  let vars; try { vars = JSON.parse($('s-vars').value || '{}'); } catch (e2) { show($('s-msg'), 'Variables must be valid JSON', false); return; }
   const recipients = { email: ch === 'EMAIL' ? rcp : null, phone: ch === 'SMS' ? rcp : null, deviceToken: ch === 'PUSH' ? rcp : null };
   const payload = { channels: [ch], priority: $('s-priority').value, recipients, variables: vars,
     templateName: $('s-template').value || null, body: $('s-body').value || null, subject: null };
@@ -116,19 +230,28 @@ $('s-send').onclick = async () => {
   const res = await fetch('/api/v1/notifications', { method: 'POST', headers: hdr(extra), body: JSON.stringify(payload) });
   if (res.ok) { const j = await res.json(); show($('s-msg'), (j.duplicate ? 'Duplicate of ' : 'Accepted ') + j.id, true); loadDeliveries(); }
   else show($('s-msg'), res.status + ' ' + await err(res), false);
-};
+});
 
 async function loadDeliveries() {
   const res = await fetch('/api/v1/deliveries?limit=50', { headers: hdr() });
   const body = $('d-rows'); body.innerHTML = '';
-  if (!res.ok) return;
-  for (const d of await res.json()) {
+  if (!res.ok) { $('d-empty').hidden = true; return; }
+  const list = await res.json();
+  $('d-empty').hidden = list.length > 0;
+  let sent = 0, dead = 0;
+  for (const d of list) {
+    if (d.status === 'SENT') sent++; else if (d.status === 'DEAD') dead++;
     const tr = document.createElement('tr');
-    cell(tr, d.notificationId); cell(tr, d.channel); cell(tr, d.status).dataset.testid = 'status'; cell(tr, d.attempts); cell(tr, d.lastError);
+    cell(tr, d.notificationId).className = 'mono'; tr.firstChild.title = d.notificationId;
+    const ch = cell(tr, ''); const chip = document.createElement('span'); chip.className = 'ch'; chip.textContent = d.channel; ch.appendChild(chip);
+    const st = cell(tr, d.status); st.dataset.testid = 'status'; st.dataset.status = d.status;
+    cell(tr, d.attempts); cell(tr, d.lastError).className = 'err';
     body.appendChild(tr);
   }
+  $('st-total').textContent = list.length; $('st-sent').textContent = sent; $('st-dead').textContent = dead;
+  $('st-pending').textContent = list.length - sent - dead;
 }
-$('d-refresh').onclick = loadDeliveries;
+$('d-refresh').onclick = (e) => busy(e.currentTarget, loadDeliveries);
 $('api-key').onchange = () => {
   try { sessionStorage.setItem('apiKey', apiKey()); } catch (e) { /* ignore */ }
   loadTemplates(); loadDeliveries();
